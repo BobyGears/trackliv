@@ -247,12 +247,12 @@ export function extractVehicles(json: unknown): { candidate: VehicleCandidate; v
 }
 
 /** Structure of a JSON document without its values – safe to print in logs and reports. */
-export function shapeOf(v: unknown, depth = 0): string {
-  if (Array.isArray(v)) return v.length === 0 ? '[]' : `[${v.length}× ${shapeOf(v[0], depth + 1)}]`;
+export function shapeOf(v: unknown, depth = 0, maxKeys = 14): string {
+  if (Array.isArray(v)) return v.length === 0 ? '[]' : `[${v.length}× ${shapeOf(v[0], depth + 1, maxKeys)}]`;
   if (isObj(v)) {
     if (depth > 4) return '{…}';
-    const entries = Object.entries(v).slice(0, 14);
-    const inner = entries.map(([k, x]) => (isObj(x) || Array.isArray(x) ? `${k}:${shapeOf(x, depth + 1)}` : k)).join(', ');
+    const entries = Object.entries(v).slice(0, maxKeys);
+    const inner = entries.map(([k, x]) => (isObj(x) || Array.isArray(x) ? `${k}:${shapeOf(x, depth + 1, maxKeys)}` : k)).join(', ');
     return `{${inner}${Object.keys(v).length > entries.length ? ', …' : ''}}`;
   }
   return typeof v;

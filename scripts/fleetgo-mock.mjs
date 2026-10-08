@@ -1,8 +1,8 @@
 // A stand-in for FleetGO, built like the real one: dashboard on one host, Keycloak sign-in on
 // another (form_post back to /kcoidc/signin-oidc), a generic POST "query" endpoint guarded by a
 // session cookie and an anti-forgery header, places mixed in with vehicles, expiring sessions.
-// Like a real account it opens on the trips page ("Fahrten Übersicht"); the vehicle positions are
-// only loaded on another page of the menu, which is reached by a click (no link).
+// Like DTE's account it opens on the trips page ("Fahrten Übersicht"); the vehicle positions are only
+// loaded on "Karte". Menu links carry ?accountId=…, like FleetGO's.
 import { randomBytes } from 'node:crypto';
 import express from 'express';
 
@@ -25,11 +25,16 @@ export async function startFleetGoMock({ username = 'dispo@example.de', password
   const authed = (req) => sessions.has(sid(req));
 
   // ---- dashboard (app.fleetgo.com) ----
+  const acc = '?accountId=3500000001';
   const menu = `<nav><ul>
-  <li><a href="/Trip_Index/View/Trip_Index">Fahrten Übersicht</a></li>
-  <li><a href="/Report_Index/View/Report_Index">Berichte</a></li>
-  <li data-url="/Map_Index/View/Map_Index" onclick="location.href=this.dataset.url">Live-Karte</li>
-  <li onclick="location.href='/Fleet_Index/View/Fleet_Index'">Fahrzeuge</li>
+  <li><a href="/Trip_Index/View/Trip_Index">Produktion</a></li>
+  <li><a href="/Trip_Index/View/Trip_Index${acc}">Fahrten</a></li>
+  <li><a href="/Location_Index/View/Location_Index${acc}">Standorte</a></li>
+  <li><a href="/Map_Index/View/Map_Index${acc}">Karte</a></li>
+  <li><a href="/Administrations/View/Administration_Index${acc}">Fahrzeuge</a></li>
+  <li><a href="/Users/View/DefaultUser_Index${acc}">Benutzer</a></li>
+  <li class="group">Berichte</li>
+  <li><a href="/Vehicle_PeriodeKmReport/View/Vehicle_PeriodeKmReport${acc}">Letzte Fahrzeugdaten</a></li>
   <li><a href="/Account/LogOff">Abmelden</a></li>
 </ul></nav>`;
   const view = (title, script) => `<!doctype html><title>FleetGO® - ${title}</title>${menu}<div id="main">${title}</div>
@@ -43,9 +48,10 @@ export async function startFleetGoMock({ username = 'dispo@example.de', password
   const authedPage = (handler) => (req, res) => (authed(req) ? res.type('html').send(handler()) : res.redirect('/LogOn'));
   app.get('/', (req, res) => (authed(req) ? res.redirect('/Trip_Index/View/Trip_Index') : res.redirect('/LogOn')));
   app.get('/Trip_Index/View/Trip_Index', authedPage(() => view('Fahrten Übersicht', `post('/api/trips/view/query', { page: 1 });`)));
-  app.get('/Report_Index/View/Report_Index', authedPage(() => view('Berichte', '')));
-  app.get('/Map_Index/View/Map_Index', authedPage(() => view('Karte', `post('/api/query', { kind: 'places' });`)));
-  app.get('/Fleet_Index/View/Fleet_Index', authedPage(() => view('Fahrzeuge', `post('/api/query', { kind: 'places' }).then(() => post('/api/query', { kind: 'vehicles', groupId: 0 }));`)));
+  app.get('/Location_Index/View/Location_Index', authedPage(() => view('Standorte', `post('/api/query', { kind: 'places' });`)));
+  app.get('/Map_Index/View/Map_Index', authedPage(() => view('Karte', `post('/api/query', { kind: 'places' }).then(() => post('/api/query', { kind: 'vehicles', groupId: 0 }));`)));
+  app.get('/Administrations/View/Administration_Index', authedPage(() => view('Fahrzeuge', `post('/api/query', { kind: 'admin' });`)));
+  for (const p of ['/Users/View/DefaultUser_Index', '/Vehicle_PeriodeKmReport/View/Vehicle_PeriodeKmReport']) app.get(p, authedPage(() => view('Seite', '')));
   app.get('/Account/LogOff', (req, res) => {
     stats.logouts++;
     sessions.delete(sid(req));
@@ -71,6 +77,10 @@ export async function startFleetGoMock({ username = 'dispo@example.de', password
   app.post('/api/query', (req, res) => {
     if (!authed(req)) return res.status(401).json({ message: 'unauthorized' });
     if (req.headers['x-requestverificationtoken'] !== antiForgery) return res.status(400).json({ message: 'anti-forgery' });
+    if (req.body.kind === 'admin') {
+      // vehicle master data: plates and names, no positions
+      return res.json({ data: { items: [101, 102, 103].map((id) => ({ id, licensePlate: `MTK-DT ${id}`, category: 'Transporter', tracker: `T-${id}` })) } });
+    }
     if (req.body.kind === 'places') {
       return res.json({ data: { items: [
         { id: 1, name: 'Lager Schieferstein', latitude: 50.01, longitude: 8.42, radius: 150 },

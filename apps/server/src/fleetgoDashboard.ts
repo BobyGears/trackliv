@@ -39,7 +39,7 @@ const MENU_GOOD: [RegExp, number][] = [
   [/dashboard|home|start|übersicht|overview|overzicht/i, 1],
 ];
 const MENU_NEVER = /log.?out|log.?off|sign.?out|abmeld|afmeld|uitlog|delete|löschen|verwijder|remove|entfern|password|passwort|wachtwoord|invoice|rechnung|factu|billing|abo|subscription|privacy|datenschutz|download|export|print|druck|mailto:|tel:|javascript:/i;
-const MENU_LATER = /trip|fahrt|rit|report|bericht|rapport|auswert|analys|setting|einstellung|instelling|config|user|benutzer|gebruiker|help|hilfe|support|geofence|poi|zone|admin|kosten|cost|fuel|tank|notification|benachrichtig|alarm|melding|account|konto|profil|planning|wartung|onderhoud|maintenance/i;
+const MENU_LATER = /trip|fahrt|rit|report|bericht|rapport|auswert|analys|setting|einstellung|instelling|config|user|benutzer|gebruiker|help|hilfe|support|geofence|poi|zone|admin|kosten|cost|fuel|tank|notification|benachrichtig|alarm|melding|account|konto|profil|planning|wartung|onderhoud|maintenance|categor|kategor/i;
 
 export interface MenuEntry {
   /** path on the dashboard host, or '' when the entry is only clickable */
@@ -85,10 +85,13 @@ const READ_MENU = `(() => {
 
 /** Highest first; entries that are never opened are left out. */
 export function rankMenu(entries: MenuEntry[], current: string): (MenuEntry & { score: number })[] {
+  // judged by the page's name and path only – FleetGO adds ?accountId=… to every link
+  const words = (e: MenuEntry) => `${e.path.split('?')[0]} ${e.text}`;
+  const page = (p: string) => p.split('?')[0];
   return entries
-    .filter((e) => !MENU_NEVER.test(`${e.path} ${e.text}`) && e.path !== current)
+    .filter((e) => !MENU_NEVER.test(words(e)) && (!e.path || page(e.path) !== page(current)))
     .map((e) => {
-      const hay = `${e.path} ${e.text}`;
+      const hay = words(e);
       let score = MENU_GOOD.reduce((n, [re, w]) => n + (re.test(hay) ? w : 0), 0);
       if (MENU_LATER.test(hay)) score -= 6;
       return { ...e, score };
@@ -449,7 +452,7 @@ export class FleetGoDashboard {
         ? 1.5
         : 1;
     const score = found ? found.candidate.score * hint : 0;
-    this.note(method, path, status, shapeOf(json).slice(0, 240), found?.vehicles.length ?? 0, Math.round(score * 10) / 10, shapeOf(json, -3).slice(0, 1200));
+    this.note(method, path, status, shapeOf(json).slice(0, 240), found?.vehicles.length ?? 0, Math.round(score * 10) / 10, shapeOf(json, -3, 40).slice(0, 2400));
     if (!found || !score) return false;
     if (this.cfg.dashboardSource && !key.includes(this.cfg.dashboardSource)) return false;
     const isSource = this.source?.key === key;

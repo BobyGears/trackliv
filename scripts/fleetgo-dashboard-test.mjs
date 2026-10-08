@@ -50,11 +50,11 @@ try {
   const st = dash.status();
   check(vehicles.length === 3, 'signs in and finds the vehicles', `${vehicles.length} vehicles from ${st.source}`);
   check(
-    st.vehiclePage === '/Fleet_Index/View/Fleet_Index' && st.tried.map((t) => t.found > 0).join() === 'false,true',
-    'starts on the trips page and finds the vehicle page through the menu',
+    st.vehiclePage === '/Map_Index/View/Map_Index?accountId=3500000001' && st.tried.map((t) => t.found > 0).join() === 'true',
+    'starts on the trips page and finds the vehicles on "Karte" through the menu',
     st.tried.map((t) => `${t.entry}: ${t.found}`).join(' · '),
   );
-  check(mock.stats.logouts === 0 && !st.tried.some((t) => /Abmelden|Berichte|Fahrten/.test(t.entry)), 'never opens "Abmelden", reports or the trips page again');
+  check(mock.stats.logouts === 0 && !st.tried.some((t) => /Abmelden|Berichte|Fahrten|Benutzer|Produktion/.test(t.entry)), 'never opens "Abmelden", users, reports or the trips page again');
   check(vehicles.map((v) => v.plate).join(',') === 'MTK-DT 101,MTK-DT 102,MTK-DT 103', 'plates', vehicles.map((v) => v.plate).join(', '));
   const v1 = vehicles[0];
   check(Math.abs(v1.lat - 50.0) < 0.05 && Math.abs(v1.lng - 8.4) < 0.01 && v1.speedKmh === 48 && v1.ignition && !!v1.ts, 'position, speed, ignition, time', JSON.stringify({ lat: v1.lat, lng: v1.lng, speed: v1.speedKmh, ts: v1.ts }));
@@ -73,7 +73,7 @@ try {
   await sleep(2_200);
   const afterExpiry = await waitForFleet(dash, 40_000);
   check(afterExpiry.length === 3 && mock.stats.logins === loginsBefore + 1, 'signs in again after the session expired', `${mock.stats.logins - loginsBefore} new sign-in`);
-  check(dash.status().tried.length === 2, 'goes straight back to the remembered vehicle page');
+  check(dash.status().tried.length === 1, 'goes straight back to the remembered vehicle page');
 
   // 5. nothing secret in the report
   const report = JSON.stringify(dash.status());
