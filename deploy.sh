@@ -37,10 +37,14 @@ if [[ ! -f "$CONF" ]]; then
   echo "── First run: where should TrackLiv be deployed? (saved in ${CONF}, not committed)"
   read -r -p "   SSH login (user@host): " IN_SERVER
   read -r -p "   SSH port [22]: " IN_PORT
+  read -r -p "   Require a login? (Y/n): " IN_LOGIN
+  [[ "$IN_LOGIN" =~ ^[nN] ]] && IN_LOGIN="off" || IN_LOGIN="on"
   cat > "$CONF" <<EOF
 # TrackLiv deploy target – not committed (see .gitignore)
 SERVER="${IN_SERVER}"
 SSH_PORT="${IN_PORT:-22}"
+# on = sign-in required, off = anyone with the link can use TrackLiv (demo). Applied on every deploy.
+LOGIN="${IN_LOGIN}"
 DOMAIN="trackliv.dd-gruppe.de"
 DEST="/opt/trackliv"
 # Caddy of Registra Atlas loads every *.caddy file in this folder
@@ -57,6 +61,8 @@ DOMAIN="${DOMAIN:-trackliv.dd-gruppe.de}"
 DEST="${DEST:-/opt/trackliv}"
 SITES_DIR="${SITES_DIR:-/opt/registra-atlas/deploy/sites}"
 EDGE_NETWORK="${EDGE_NETWORK:-atlas-edge}"
+LOGIN="${LOGIN:-on}"
+if [[ "$LOGIN" != "on" && "$LOGIN" != "off" ]]; then echo "✗ LOGIN in ${CONF} must be \"on\" or \"off\""; exit 1; fi
 SSH=(ssh -p "${SSH_PORT}" -o ServerAliveInterval=30)
 MODE="${1:-}"
 
@@ -100,18 +106,25 @@ rsync -az --delete -e "ssh -p ${SSH_PORT}" "${RSYNC_EXCLUDES[@]}" ./ "${SERVER}:
 STEP="3/6 server .env"
 echo "── 3/6 Server settings (${DEST}/.env)"
 # The server .env holds FleetGO credentials and logins – it never leaves the server.
-# First deploy: create it from .env.example, generate the session secret and an Admin login.
+# First deploy: create it from .env.example and generate the session secret. LOGIN (deploy/server.env)
+# decides whether TRACKLIV_AUTH=off is set; with the login on, an Admin login is created if none exists.
 "${SSH[@]}" "${SERVER}" "set -e; cd ${DEST}
   if [ ! -f .env ]; then cp app/.env.example .env; chmod 600 .env; echo '   created .env from .env.example'; fi
   if ! grep -Eq '^TRACKLIV_SESSION_SECRET=[0-9a-fA-F]{64}\$' .env; then
     echo \"TRACKLIV_SESSION_SECRET=\$(openssl rand -hex 32)\" >> .env; echo '   session secret: generated'; fi
-  if ! grep -Eq '^TRACKLIV_USERS=.+' .env; then
+  if [ ${LOGIN} = off ]; then
+    grep -q '^TRACKLIV_AUTH=off\$' .env || echo 'TRACKLIV_AUTH=off' >> .env
+    echo '   Login: OFF – anyone with the link can use TrackLiv (LOGIN=\"on\" in deploy/server.env switches it on)'
+  else
+    sed -i '/^TRACKLIV_AUTH=off\$/d' .env
+  fi
+  if [ ${LOGIN} = on ] && ! grep -Eq '^TRACKLIV_USERS=.+' .env; then
     PW=\$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-16)
     echo \"TRACKLIV_USERS=Admin:\$PW\" >> .env
     echo ''
     echo '   ┌──────────────────────────────────────────────────────────────'
     echo \"   │ First login:  Admin  /  \$PW\"
-    echo \"   │ More people:  TRACKLIV_USERS=\\\"Admin:…,Name:password\\\" in ${DEST}/.env\"
+    echo \"   │ More people:  TRACKLIV_USERS=Admin:…,Name:password  in ${DEST}/.env\"
     echo '   └──────────────────────────────────────────────────────────────'
     echo ''
   fi

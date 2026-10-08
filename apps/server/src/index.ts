@@ -76,9 +76,11 @@ ops.clock.setSpeed(live ? 1 : config.simulator.speed);
 
 // ---------------------------------------------------------------------------------------------
 const auth = createAuth(process.env);
-if (config.production && !auth.enabled && process.env.TRACKLIV_AUTH !== 'off') {
+if (process.env.TRACKLIV_AUTH === 'off') {
+  console.warn('[auth] login is OFF (TRACKLIV_AUTH=off) – anyone who can open the site can use TrackLiv');
+} else if (config.production && !auth.enabled) {
   console.error('[trackliv] Refusing to start in production without users. Set TRACKLIV_USERS="Name:password,…" in .env');
-  console.error('           (or TRACKLIV_AUTH=off if the server is only reachable from a private network).');
+  console.error('           (or TRACKLIV_AUTH=off to run without a login, e.g. for a demo).');
   process.exit(1);
 }
 if (auth.enabled && !/^[0-9a-f]{32,}$/i.test(process.env.TRACKLIV_SESSION_SECRET ?? '')) {

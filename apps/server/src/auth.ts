@@ -57,7 +57,8 @@ export function createAuth(env: NodeJS.ProcessEnv): AuthConfig {
   const users = parseUsers(env.TRACKLIV_USERS);
   const secretHex = env.TRACKLIV_SESSION_SECRET ?? '';
   const secret = /^[0-9a-f]{32,}$/i.test(secretHex) ? Buffer.from(secretHex, 'hex') : randomBytes(32);
-  return { users, secret, enabled: users.size > 0 };
+  // TRACKLIV_AUTH=off switches the login off even when users are listed (e.g. for a demo)
+  return { users, secret, enabled: users.size > 0 && env.TRACKLIV_AUTH !== 'off' };
 }
 
 function sign(auth: AuthConfig, payload: string) {

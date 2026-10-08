@@ -28,7 +28,9 @@ describe('auth', () => {
     expect(readSession(removed, token)).toBeNull(); // user no longer configured
   });
 
-  it('is disabled without users', () => {
+  it('is disabled without users or with TRACKLIV_AUTH=off', () => {
     expect(createAuth({}).enabled).toBe(false);
+    expect(createAuth({ TRACKLIV_USERS: 'Boby:x' }).enabled).toBe(true);
+    expect(createAuth({ TRACKLIV_USERS: 'Boby:x', TRACKLIV_AUTH: 'off' }).enabled).toBe(false);
   });
 });

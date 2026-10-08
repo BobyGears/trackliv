@@ -126,7 +126,7 @@ TrackLiv runs on our own server, next to Registra Atlas. It is one Docker contai
 ./deploy.sh --dry-run    # show what would be uploaded
 ```
 
-On the first run the script asks for the SSH login and port (the same as for Registra Atlas) and saves them in `deploy/server.env`. That file is git-ignored.
+On the first run the script asks for the SSH login and port (the same as for Registra Atlas) and whether a login is required, and saves the answers in `deploy/server.env`. That file is git-ignored.
 
 **Once, before the first deploy:**
 
@@ -151,6 +151,8 @@ To switch from the simulator to live vehicles, put the FleetGO credentials into 
 ```
 TRACKLIV_USERS=Admin:…,Boby:scrypt:…,Dispo 2:another-password
 ```
+
+To run without a login (e.g. as a demo), set `LOGIN="off"` in `deploy/server.env` and deploy; `LOGIN="on"` switches it back on, and creates an `Admin` login if there is none.
 
 Passwords can be plain (the file is only readable by its owner) or a scrypt hash from `npm run hash-password`. Don't use `$` or `,` in plain passwords. Sessions last 30 days. Removing a name signs that person out at their next request. After changing the file, run `./deploy.sh --no-build`. Every change in the audit log is attributed to the signed-in name.
 
