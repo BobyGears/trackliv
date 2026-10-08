@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Browser, BrowserContext, Page, Request, Response } from 'playwright-core';
 import { config } from './config.ts';
 import type { FleetGoEquipment } from './fleetgo.ts';
-import { extractVehicles, framePayloads, maskUser, redactUrl, shapeOf } from './fleetgoExtract.ts';
+import { StreamMerger, extractVehicles, framePayloads, maskUser, parseSse, redactUrl, shapeOf } from './fleetgoExtract.ts';
 
 /**
  * FleetGO via the web dashboard – like signing in by hand.
@@ -18,6 +18,10 @@ import { extractVehicles, framePayloads, maskUser, redactUrl, shapeOf } from './
  * FleetGO opens on each user's own start page (e.g. "Fahrten Übersicht"), which may not load any vehicle
  * positions. Then the connector looks through the dashboard's own menu, opens the entries that look like
  * a live map or vehicle list one by one, and remembers the page that delivered the vehicles.
+ *
+ * FleetGO's map ("Karte") gets the positions from live streams (server-sent events) that stay open. Their
+ * messages are read as they arrive (Chromium DevTools protocol) and merged per vehicle; while the stream is
+ * open the data counts as current, even when parked vehicles send nothing new.
  *
  * Nothing secret is logged: no password, cookies, tokens or headers; URLs without token-like values.
  */
@@ -147,7 +151,7 @@ export class FleetGoDashboard {
   private failures = 0;
   private lastError = '';
   private vehicles = new Map<string, FleetGoEquipment>();
-  private source: { key: string; score: number } | null = null;
+  private source: { key: string; score: number; stream?: boolean } | null = null;
   private recipe: Recipe | null = null;
   lastData = 0;
   readonly observed = new Map<string, ObservedRequest>();
@@ -158,6 +162,8 @@ export class FleetGoDashboard {
   /** the page (or menu entry) the dashboard is on – for the report */
   private where = '';
   private wsFrames = new Map<string, { frames: number; json: number }>();
+  /** live streams by key ("sse <url>"): merged vehicles, what arrived, and how many connections are open */
+  private streams = new Map<string, { merger: StreamMerger; open: number; events: number; names: Map<string, number>; shapes: string[] }>();
 
   constructor(
     private cfg: Cfg = config.fleetgo,
@@ -184,7 +190,7 @@ export class FleetGoDashboard {
     if (!this.lastData) {
       throw new Error('Signed in to FleetGO – waiting for the dashboard to load vehicle data (./deploy.sh --fleetgo-check shows what it sees)');
     }
-    if (Date.now() - this.lastData > Math.max(5 * pollMs, 5 * 60_000)) {
+    if (Date.now() - this.lastData > Math.max(5 * pollMs, 5 * 60_000) && !this.sourceStreamOpen()) {
       this.signedIn = false; // force a fresh page load / sign-in next time
       throw new Error(`No new vehicle data from the FleetGO dashboard for ${Math.round((Date.now() - this.lastData) / 60_000)} min`);
     }
@@ -259,9 +265,101 @@ export class FleetGoDashboard {
         for (const m of messages) this.ingest(m, `ws ${url}`, 'WS', 101);
       });
     });
+    await this.watchStreams(this.page).catch((e) => this.log(`live streams cannot be read: ${e instanceof Error ? e.message : e}`));
     this.page.on('framenavigated', (frame) => {
       if (frame === this.page?.mainFrame() && new URL(frame.url()).host !== this.appHost) this.signedIn = false;
     });
+  }
+
+  /** Read server-sent-event streams (fetch, XHR or EventSource) as their data arrives. */
+  private async watchStreams(page: Page) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Network.enable');
+    type Open = { key: string; url: string; buf: string; ready: boolean; pending: string[] };
+    const open = new Map<string, Open>();
+    const feed = (st: Open, text: string) => {
+      st.buf += text;
+      if (st.buf.length > 8_000_000) st.buf = st.buf.slice(-1_000_000);
+      const { events, rest } = parseSse(st.buf);
+      st.buf = rest;
+      for (const e of events) this.onStreamEvent(st.key, st.url, e.event, e.data);
+    };
+    cdp.on('Network.responseReceived', (e) => {
+      if (!/event-stream/i.test(e.response.mimeType ?? '')) return;
+      const url = redactUrl(e.response.url).split('?')[0];
+      const st: Open = { key: `sse ${url}`, url, buf: '', ready: false, pending: [] };
+      open.set(e.requestId, st);
+      this.stream(st.key).open++;
+      this.noteStream(st.key, url);
+      cdp
+        .send('Network.streamResourceContent', { requestId: e.requestId })
+        .then((r) => {
+          feed(st, Buffer.from(r.bufferedData, 'base64').toString('utf8'));
+          st.ready = true;
+          for (const t of st.pending.splice(0)) feed(st, t);
+        })
+        .catch((err: Error) => this.note('SSE', url, 0, `(live stream cannot be read: ${String(err.message).slice(0, 100)})`, 0, 0));
+    });
+    cdp.on('Network.dataReceived', (e) => {
+      const st = open.get(e.requestId);
+      if (!st || !e.data) return;
+      const text = Buffer.from(e.data, 'base64').toString('utf8');
+      if (st.ready) feed(st, text);
+      else st.pending.push(text);
+    });
+    const closed = (e: { requestId: string }) => {
+      const st = open.get(e.requestId);
+      if (!st) return;
+      open.delete(e.requestId);
+      this.stream(st.key).open = Math.max(0, this.stream(st.key).open - 1);
+      this.noteStream(st.key, st.url);
+    };
+    cdp.on('Network.loadingFinished', closed);
+    cdp.on('Network.loadingFailed', closed);
+  }
+
+  private stream(key: string) {
+    let s = this.streams.get(key);
+    if (!s) this.streams.set(key, (s = { merger: new StreamMerger(), open: 0, events: 0, names: new Map(), shapes: [] }));
+    return s;
+  }
+
+  private sourceStreamOpen() {
+    return !!this.source?.stream && (this.streams.get(this.source.key)?.open ?? 0) > 0;
+  }
+
+  private onStreamEvent(key: string, url: string, name: string, data: string) {
+    const s = this.stream(key);
+    s.events++;
+    s.names.set(name, (s.names.get(name) ?? 0) + 1);
+    let json: unknown;
+    try {
+      json = JSON.parse(data);
+    } catch {
+      this.noteStream(key, url, '(text, not JSON)');
+      return;
+    }
+    const shape = shapeOf(json, -3, 40).slice(0, 1200);
+    if (!s.shapes.includes(shape) && s.shapes.length < 3) s.shapes.push(shape);
+    const updated = s.merger.ingest(json);
+    const vehicles = updated ? s.merger.vehicles() : [];
+    this.noteStream(key, url);
+    if (!vehicles.length) return;
+    if (this.cfg.dashboardSource && !key.includes(this.cfg.dashboardSource)) return;
+    if (this.source && this.source.key !== key && !this.source.stream) return; // a replayable list already serves
+    if (this.source?.key !== key) this.log(`vehicle data found: ${vehicles.length} vehicles from the live stream ${url}`);
+    this.source = { key, score: s.merger.score, stream: true };
+    this.vehicles = new Map(vehicles.map((v) => [String(v.equipmentId), v]));
+    this.lastData = Date.now();
+  }
+
+  /** Report line for a live stream: how many messages of which kind, and their structure. */
+  private noteStream(key: string, url: string, extra = '') {
+    const s = this.stream(key);
+    const names = [...s.names.entries()].map(([n, c]) => `"${n}" ×${c}`).join(', ');
+    const head = `(live stream${s.open ? ', open' : ', closed'}: ${s.events} message(s)${names ? ` – ${names}` : ''})${extra ? ` ${extra}` : ''}`;
+    const vehicles = s.merger.vehicles().length;
+    this.note('SSE', url, 200, head, vehicles, vehicles ? Math.round(s.merger.score * 10) / 10 : 0, s.shapes.length ? `${head} ${s.shapes.join(' | ')}` : head);
   }
 
   private async onLoginForm(): Promise<boolean> {
@@ -384,6 +482,18 @@ export class FleetGoDashboard {
   private async refresh() {
     const page = this.page!;
     const pollMs = this.cfg.pollSeconds * 1000;
+    if (this.source?.stream) {
+      // the live stream delivers by itself; reload only when it has closed (the page subscribes again)
+      if (this.sourceStreamOpen() || Date.now() - this.lastReload < 60_000) return;
+      this.lastReload = Date.now();
+      await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
+      if (await this.onLoginForm()) {
+        this.signedIn = false;
+        await this.ensureSession();
+      }
+      return;
+    }
     if (!this.recipe) {
       // the vehicle request is not known yet (or arrives via websocket) – reload now and then
       if (Date.now() - this.lastReload > Math.max(2 * pollMs, 60_000)) {
@@ -428,12 +538,10 @@ export class FleetGoDashboard {
   private async onResponse(resp: Response) {
     try {
       const req: Request = resp.request();
-      if (req.resourceType() === 'eventsource') {
-        this.note('GET', redactUrl(resp.url()).split('?')[0], resp.status(), '(event stream – its messages cannot be read here)', 0, 0);
-        return;
-      }
+      if (req.resourceType() === 'eventsource') return; // read as it arrives (watchStreams)
       if (!['xhr', 'fetch'].includes(req.resourceType())) return;
       const ct = resp.headers()['content-type'] ?? '';
+      if (ct.includes('event-stream')) return; // live streams are read as they arrive (watchStreams)
       if (!ct.includes('json') || resp.status() !== 200) {
         this.note(req.method(), redactUrl(resp.url()).split('?')[0], resp.status(), ct.includes('json') ? '(json)' : `(${ct.split(';')[0] || 'no body'})`, 0, 0);
         return;

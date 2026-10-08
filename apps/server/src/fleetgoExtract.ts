@@ -258,6 +258,89 @@ export function shapeOf(v: unknown, depth = 0, maxKeys = 14): string {
   return typeof v;
 }
 
+/** Complete server-sent events in a received text buffer, and the unfinished rest. */
+export function parseSse(buffer: string): { events: { event: string; data: string }[]; rest: string } {
+  const blocks = buffer.split(/\r?\n\r?\n/);
+  const rest = blocks.pop() ?? '';
+  const events: { event: string; data: string }[] = [];
+  for (const block of blocks) {
+    let event = 'message';
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (!line || line.startsWith(':')) continue; // comment / keep-alive
+      const i = line.indexOf(':');
+      const name = i < 0 ? line : line.slice(0, i);
+      const value = i < 0 ? '' : line.slice(i + 1).replace(/^ /, '');
+      if (name === 'event') event = value;
+      else if (name === 'data') data.push(value);
+    }
+    if (data.length) events.push({ event, data: data.join('\n') });
+  }
+  return { events, rest };
+}
+
+const topId = (o: Obj) => {
+  for (const [k, v] of Object.entries(o)) if (K.id.test(k) && (typeof v === 'string' || typeof v === 'number') && v !== '') return String(v);
+  return undefined;
+};
+/** What identifies a vehicle record: its id, else its plate or name. */
+const recordKey = (o: Obj) => {
+  const v = topId(o) ?? field(o, K.plate) ?? field(o, K.name);
+  return v === undefined ? undefined : String(v);
+};
+
+function deepMerge(a: Obj, b: Obj): Obj {
+  const out: Obj = { ...a };
+  for (const [k, v] of Object.entries(b)) out[k] = isObj(v) && isObj(out[k]) ? deepMerge(out[k] as Obj, v) : v;
+  return out;
+}
+
+/**
+ * Vehicles from a live stream (FleetGO's map keeps one open): the vehicles arrive as a list, later
+ * messages often carry only what changed for one vehicle (e.g. position and speed, without the plate).
+ * Records are merged per vehicle, so each one keeps everything it was ever told.
+ */
+export class StreamMerger {
+  private raw = new Map<string, Obj>();
+  score = 0;
+
+  /** How many vehicles this message updated. */
+  ingest(json: unknown): number {
+    const cand = findVehicleList(json);
+    let records: Obj[] = [];
+    if (cand) {
+      records = cand.items.filter(isObj);
+      this.score = Math.max(this.score, cand.score);
+    } else if (this.raw.size) {
+      records = this.updatesIn(json);
+    }
+    let n = 0;
+    for (const r of records) {
+      const key = recordKey(r);
+      if (key === undefined) continue;
+      this.raw.set(key, deepMerge(this.raw.get(key) ?? {}, r));
+      n++;
+    }
+    return n;
+  }
+
+  /** Objects in a message that name a vehicle we already know (by its id). */
+  private updatesIn(json: unknown, depth = 0, out: Obj[] = []): Obj[] {
+    if (depth > 3) return out;
+    if (Array.isArray(json)) for (const x of json) this.updatesIn(x, depth + 1, out);
+    else if (isObj(json)) {
+      const id = topId(json);
+      if (id !== undefined && this.raw.has(id)) out.push(json);
+      else for (const v of Object.values(json)) if (isObj(v) || Array.isArray(v)) this.updatesIn(v, depth + 1, out);
+    }
+    return out;
+  }
+
+  vehicles(): FleetGoEquipment[] {
+    return [...this.raw.values()].map((r, i) => normalizeRecord(r, i)).filter((v): v is FleetGoEquipment => !!v && v.lat !== null && v.lng !== null);
+  }
+}
+
 /**
  * Messages in one websocket frame. SignalR (ASP.NET Core) separates messages with \x1e and carries data
  * in "arguments"; the older ASP.NET SignalR sends {C, M:[{H, M, A:[…]}]} (hub calls) or {I, R} (results).

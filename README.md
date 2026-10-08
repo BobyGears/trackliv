@@ -104,7 +104,7 @@ How it works:
 - When the session expires it signs in again. After a rejected password it waits 15 minutes, so the FleetGO user doesn't get locked.
 - Nothing secret is written to the log: no password, cookies or tokens.
 
-`./deploy.sh --fleetgo-check` signs in once and prints what TrackLiv sees: the requests the dashboard made (structure only, no values) and the vehicles it found. FleetGO opens on each user's own start page (e.g. *Fahrten Übersicht*). If that page loads no vehicle positions, TrackLiv looks through FleetGO's menu, opens the entries that look like a live map or vehicle list (never sign-out, settings or reports) and remembers the page that has them (`data/fleetgo-page.json`). If it can't find it, the check lists the menu; set `FLEETGO_DASHBOARD_PAGE` to the right path from that list.
+`./deploy.sh --fleetgo-check` signs in once and prints what TrackLiv sees: the requests the dashboard made (structure only, no values) and the vehicles it found. FleetGO opens on each user's own start page (e.g. *Fahrten Übersicht*). If that page loads no vehicle positions, TrackLiv looks through FleetGO's menu, opens the entries that look like a live map or vehicle list (never sign-out, settings or reports) and remembers the page that has them (`data/fleetgo-page.json`). If it can't find it, the check lists the menu; set `FLEETGO_DASHBOARD_PAGE` to the right path from that list. FleetGO's map (*Karte*) gets the positions from live streams that stay open; TrackLiv reads them as they arrive and keeps each vehicle up to date from the partial updates.
 
 Tips:
 

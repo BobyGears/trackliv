@@ -80,7 +80,31 @@ try {
   check(!report.includes('right-password') && !/sid=|requestverificationtoken"?:\s*"[0-9a-f]{16}/i.test(report), 'report contains no password, cookie or token');
   await dash.close();
 
-  // 6. optional: the real FleetGO sign-in page still has the fields we fill in (no sign-in attempt)
+  // 6. like DTE's FleetGO: "Karte" gets the vehicles from a live stream (list once, then partial updates)
+  const smock = await startFleetGoMock({ mapMode: 'stream' });
+  const sdash = new FleetGoDashboard({ ...base, dashboardUrl: smock.appUrl, username: 'dispo@example.de', password: 'right-password' }, quiet, null);
+  try {
+    const sv = await waitForFleet(sdash, 180_000);
+    const sst = sdash.status();
+    check(sv.length === 3 && /SubscribeAdministrations/.test(sst.source ?? '') && /Map_Index/.test(sst.vehiclePage), 'reads the vehicles from the live stream on "Karte"', `${sv.length} vehicles from ${sst.source}`);
+    await sleep(2_500);
+    const moved = (await sdash.fleet()).find((v) => v.plate === 'MTK-DT 101');
+    check(!!moved && moved.speedKmh === 48 && moved.ignition && moved.lat > 50.0005, 'partial updates move the vehicle and keep its plate', JSON.stringify(moved && { plate: moved.plate, lat: moved.lat, speed: moved.speedKmh, ignition: moved.ignition }));
+    check(sst.observed.some((o) => /signal\/subscribe/.test(o.url) && /live stream/.test(o.shape)), 'report lists both live streams');
+    const before = smock.stats.streams;
+    smock.dropStreams();
+    const until = Date.now() + 100_000;
+    while (smock.stats.streams === before && Date.now() < until) {
+      await sdash.fleet().catch(() => {});
+      await sleep(1_000);
+    }
+    check(smock.stats.streams > before && (await sdash.fleet()).length === 3, 'subscribes again when the stream drops');
+  } finally {
+    await sdash.close();
+    await smock.close();
+  }
+
+  // 7. optional: the real FleetGO sign-in page still has the fields we fill in (no sign-in attempt)
   if (process.argv.includes('--real')) {
     const { chromium } = await import('playwright-core');
     const browser = await chromium.launch({ headless: true, executablePath: browserPath || undefined, args: ['--no-sandbox'] });

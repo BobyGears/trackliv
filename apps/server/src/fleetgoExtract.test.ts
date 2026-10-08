@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coordsOf, extractVehicles, framePayloads, maskUser, normalizeRecord, parseTime, redactUrl, shapeOf } from './fleetgoExtract.ts';
+import { coordsOf, extractVehicles, framePayloads, parseSse, StreamMerger, maskUser, normalizeRecord, parseTime, redactUrl, shapeOf } from './fleetgoExtract.ts';
 
 const vehicle = (i: number, extra: Record<string, unknown> = {}) => ({
   id: 100 + i,
@@ -63,5 +63,30 @@ describe('websocket frames', () => {
     expect(framePayloads('{"C":"d-1","M":[{"H":"mapHub","M":"update","A":[[{"plate":"MTK-TE 840"}]]}]}')).toEqual([[[{ plate: 'MTK-TE 840' }]]]);
     expect(framePayloads('{"I":"0","R":{"vehicles":[]}}')).toEqual([{ vehicles: [] }]);
     expect(framePayloads('o')).toBeNull();
+  });
+});
+
+describe('live streams (server-sent events)', () => {
+  it('splits events, joins multi-line data, skips keep-alives, keeps the unfinished rest', () => {
+    const { events, rest } = parseSse(': ping\n\nevent: update\ndata: {"a":\ndata: 1}\n\ndata: [2]\r\n\r\ndata: {"b"');
+    expect(events).toEqual([
+      { event: 'update', data: '{"a":\n1}' },
+      { event: 'message', data: '[2]' },
+    ]);
+    expect(rest).toBe('data: {"b"');
+  });
+
+  it('merges a vehicle list with later partial updates', () => {
+    const m = new StreamMerger();
+    const list = [101, 102, 103].map((Id, i) => ({ Id, LicensePlate: `MTK-TE ${Id}`, Latitude: 50 + i / 100, Longitude: 8.4, Speed: 0, Heading: 0, DateTime: '2026-10-08T06:00:00Z' }));
+    expect(m.ingest({ Administrations: list })).toBe(3);
+    // only what changed, no plate
+    expect(m.ingest({ Id: 102, Latitude: 50.2, Longitude: 8.6, Speed: 63, Heading: 90 })).toBe(1);
+    // a message about something else (another id) changes nothing
+    expect(m.ingest({ Id: 999, Value: 1 })).toBe(0);
+    const v = m.vehicles().find((x) => x.plate === 'MTK-TE 102')!;
+    expect(v).toMatchObject({ speedKmh: 63, heading: 90 });
+    expect(v.lat).toBeCloseTo(50.2);
+    expect(m.vehicles()).toHaveLength(3);
   });
 });
