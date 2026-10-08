@@ -82,7 +82,7 @@ interface State {
   eventsOpen: boolean;
   focus: FocusRequest | null;
   mapPick: MapPick | null;
-  layers: { routes: boolean; labels: boolean; buildings: boolean; crew: boolean };
+  layers: { routes: boolean; labels: boolean; buildings: boolean; crew: boolean; streets: boolean };
   is3d: boolean;
   toasts: Toast[];
   history: Assignment[][];
@@ -189,7 +189,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   eventsOpen: false,
   focus: null,
   mapPick: null,
-  layers: { routes: true, labels: true, buildings: true, crew: true },
+  layers: { routes: true, labels: true, buildings: true, crew: true, streets: false },
   is3d: true,
   toasts: [],
   history: [],

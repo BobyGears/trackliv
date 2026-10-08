@@ -9,24 +9,24 @@ import type { Theme } from '../lib/store';
 
 export const PALETTE = {
   light: {
-    background: '#e7ebf1',
-    urban: '#dde2ea',
-    forest: '#dbe6dc',
-    water: '#bcd5f2',
-    waterLine: '#a9c8ee',
-    rail: '#b4bdca',
-    roadCasing: '#cfd6e1',
+    background: '#e8ecf2',
+    urban: '#d9dfe8',
+    forest: '#d5e4d6',
+    water: '#b3d0f0',
+    waterLine: '#a2c4ec',
+    rail: '#aeb8c6',
+    roadCasing: '#c9d1dd',
     motorway: '#ffffff',
-    motorwayCasing: '#c5cedb',
-    primary: '#fbfcfd',
-    secondary: '#f6f8fb',
+    motorwayCasing: '#b9c4d3',
+    primary: '#ffffff',
+    secondary: '#f9fafc',
     minor: '#ffffff',
     path: '#d3d9e2',
-    grass: '#dbe7d6',
-    parking: '#dde2ea',
+    grass: '#d8e6d3',
+    parking: '#dce1e9',
     building: '#f7f8fb',
     buildingDim: '#eef1f5',
-    label: '#4b5567',
+    label: '#3f4a5c',
     labelHalo: 'rgba(255,255,255,0.92)',
     streetLabel: '#7b8597',
     geofence: '#2f6bff',
@@ -57,6 +57,12 @@ export const PALETTE = {
 } as const;
 
 const origin = () => window.location.origin;
+
+/**
+ * Raster tiles for the optional "Street detail" layer (needs internet). Defaults to the OSM tile
+ * server – fine for a small dispatch office; set VITE_STREET_TILES to your own provider for heavier use.
+ */
+const STREET_TILES = (import.meta.env.VITE_STREET_TILES as string | undefined) ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 /** Extent of the offline basemap (see scripts/geo/fetch_overture.py REGION_BBOX). */
 export const REGION_BBOX: [number, number, number, number] = [7.95, 49.75, 9.05, 50.35];
@@ -133,6 +139,13 @@ export function buildStyle(theme: Theme): StyleSpecification {
       'hq-rail': { type: 'geojson', data: geo('hq-rail.geojson') },
       'hq-buildings': { type: 'geojson', data: geo('hq-buildings.geojson') },
       'region-mask': { type: 'geojson', data: regionMask() },
+      streets: {
+        type: 'raster',
+        tiles: [STREET_TILES],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: '© OpenStreetMap contributors',
+      },
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': c.background } },
@@ -226,6 +239,20 @@ export function buildStyle(theme: Theme): StyleSpecification {
           },
         },
       ]),
+      // Optional online street detail (Map layers → "Street detail"), greyed to match the UI.
+      {
+        id: 'streets-raster',
+        type: 'raster',
+        source: 'streets',
+        layout: { visibility: 'none' },
+        paint: {
+          'raster-saturation': -0.85,
+          'raster-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0.35, 14, 0.75],
+          'raster-contrast': -0.15,
+          'raster-brightness-min': theme === 'dark' ? 0 : 0.12,
+          'raster-brightness-max': theme === 'dark' ? 0.35 : 1,
+        },
+      },
       // Fade out everything beyond the extracted Rhein-Main region.
       {
         id: 'region-mask',
@@ -373,6 +400,8 @@ export function applyTheme(map: MlMap, theme: Theme) {
   set('places-towns', 'text-color', c.label);
   set('places-towns', 'text-halo-color', c.labelHalo);
   set('region-mask', 'fill-color', c.background);
+  set('streets-raster', 'raster-brightness-min', theme === 'dark' ? 0 : 0.12);
+  set('streets-raster', 'raster-brightness-max', theme === 'dark' ? 0.35 : 1);
   set('tl-geofence-fill', 'fill-color', c.geofence);
   set('tl-geofence-line', 'line-color', c.geofence);
 }

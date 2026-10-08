@@ -234,6 +234,7 @@ class MapController {
     vis(this.hq!.id, st.layers.buildings);
     vis('places-towns', st.layers.labels);
     vis('hq-street-labels', st.layers.labels);
+    vis('streets-raster', st.layers.streets);
     this.syncAll();
   }
 
@@ -537,9 +538,27 @@ class MapController {
       }
     }
 
-    // Vehicles
+    // Vehicles – labels at street zoom are decluttered (selected first, moving next).
+    const labelBoxes: [number, number, number, number][] = [];
+    const vehicleOrder = st.vehicles
+      .filter((v) => st.telemetry[v.id])
+      .sort((a, b) => {
+        const sa = sel?.type === 'vehicle' && sel.id === a.id ? 1 : 0;
+        const sb = sel?.type === 'vehicle' && sel.id === b.id ? 1 : 0;
+        return sb - sa || (st.telemetry[b.id].speedKmh > 2 ? 1 : 0) - (st.telemetry[a.id].speedKmh > 2 ? 1 : 0);
+      });
+    const compactLabel = new Set<string>();
+    if (zoom >= 15.2) {
+      for (const v of vehicleOrder) {
+        const t = st.telemetry[v.id];
+        const pt = this.map.project([t.lng, t.lat]);
+        const box: [number, number, number, number] = [pt.x - 12, pt.y - 48, pt.x + 190, pt.y - 22];
+        if (labelBoxes.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) compactLabel.add(v.id);
+        else labelBoxes.push(box);
+      }
+    }
     const seenV = new Set<string>();
-    for (const v of st.vehicles) {
+    for (const v of vehicleOrder) {
       const t = st.telemetry[v.id];
       if (!t) continue;
       seenV.add(v.id);
@@ -558,11 +577,12 @@ class MapController {
       const atDepot = isAtDepot(t, st.sites);
       const selected = sel?.type === 'vehicle' && sel.id === v.id;
       const moving = t.speedKmh > 2;
-      const label = zoom >= 15.2;
-      const show = selected || label || (!atDepot && !(a?.stage === 'on_site' && zoom < 13));
+      const label = zoom >= 15.2 && !compactLabel.has(v.id);
+      const show = selected || zoom >= 15.2 || (!atDepot && !(a?.stage === 'on_site' && zoom < 13));
       m.shown = show && st.layers.labels !== false ? true : show;
       m.el.style.display = show ? '' : 'none';
       const stage = a?.stage ?? 'planned';
+      m.el.style.zIndex = selected ? '5' : label ? '3' : '2';
       renderVehicleMarker(m.el, {
         callsign: v.callsign,
         color: TONE_HEX[STAGE_TONE[stage]],
@@ -570,6 +590,7 @@ class MapController {
         moving,
         selected,
         label,
+        lifted: zoom >= 15.2,
         status: a?.crew.length ? `${STAGE_LABEL[stage]} · ${destinationLabel(a.destination, st.projects)}` : v.status === 'active' ? 'Unassigned' : v.status,
       });
     }

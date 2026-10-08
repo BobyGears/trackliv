@@ -19,10 +19,20 @@ if (!existsSync('apps/web/dist/index.html')) {
   process.exit(1);
 }
 
-const server = spawn('npx', ['tsx', 'apps/server/src/index.ts'], {
+// Own process group so the whole tree (node + tsx loader) is stopped afterwards.
+const server = spawn(process.execPath, ['--import', 'tsx', 'apps/server/src/index.ts'], {
   env: { ...process.env, PORT: String(PORT), TRACKLIV_DATA_DIR: dataDir, NODE_ENV: 'production', FLEETGO_CLIENT_ID: '' },
   stdio: ['ignore', 'pipe', 'pipe'],
+  detached: true,
 });
+const stopServer = () => {
+  try {
+    process.kill(-server.pid, 'SIGTERM');
+  } catch {
+    /* already gone */
+  }
+};
+process.on('exit', stopServer);
 let serverLog = '';
 server.stdout.on('data', (d) => (serverLog += d));
 server.stderr.on('data', (d) => (serverLog += d));
@@ -218,12 +228,15 @@ try {
   if (!process.argv.includes('--keep')) await browser.close();
 } catch (e) {
   failures++;
-  console.error('✗ e2e aborted:', e.message);
+  console.error('✗ e2e aborted:', e.message, e.cause ? `(${e.cause.code ?? ''} ${e.cause.message ?? e.cause})` : '', `server exit: ${server.exitCode}`);
   console.error('--- server log (tail) ---\n' + serverLog.split('\n').slice(-25).join('\n'));
 } finally {
   if (!process.argv.includes('--keep')) {
-    server.kill('SIGTERM');
-    rmSync(dataDir, { recursive: true, force: true });
+    // let the server flush its JSON store on SIGTERM before removing the data dir
+    const exited = new Promise((r) => server.once('exit', r));
+    stopServer();
+    await Promise.race([exited, sleep(3000)]);
+    rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

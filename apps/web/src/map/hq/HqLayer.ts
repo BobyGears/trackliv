@@ -299,11 +299,12 @@ export class HqLayer implements CustomLayerInterface {
       if (v.state.selected) animating = true;
     }
     this.layoutCrew(now, boost);
-    if (this.idleCrew.some((c) => c.count) || [...this.vehicles.values()].some((v) => v.state.showCrew)) animating = true;
+    // idle sway is only worth repainting for when people are big enough to see
+    if (zoom >= 16.5 && (this.idleCrew.some((c) => c.count) || [...this.vehicles.values()].some((v) => v.state.showCrew))) animating = true;
 
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
-    if (animating || dt > 0.09) this.map.triggerRepaint();
+    if (animating) this.map.triggerRepaint();
   }
 
   private layoutCrew(now: number, boost: number) {

@@ -63,11 +63,11 @@ const PARK = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke
 
 export function renderVehicleMarker(
   el: HTMLElement,
-  v: { callsign: string; color: string; heading: number; moving: boolean; selected: boolean; label: boolean; status: string },
+  v: { callsign: string; color: string; heading: number; moving: boolean; selected: boolean; label: boolean; lifted?: boolean; status: string },
 ) {
   const chip = el.firstElementChild as HTMLElement;
   chip.classList.toggle('is-selected', v.selected);
-  chip.classList.toggle('is-label', v.label);
+  chip.classList.toggle('is-label', v.label || v.lifted);
   const arrow = chip.querySelector('.arrow') as HTMLElement;
   arrow.style.background = v.color;
   const html = v.moving ? ARROW : PARK;

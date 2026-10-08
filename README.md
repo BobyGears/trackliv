@@ -6,11 +6,13 @@ TrackLiv shows every project in the Rhein-Main region on one map. Both HQs, **Sc
 
 ![Overview](docs/screenshots/overview.jpg)
 
-| True-scale 3D HQ | Dispatch board |
+| True-scale 3D HQ (Schieferstein 4) | Yard close-up (Hafenstraße 18) |
 | --- | --- |
-| ![HQ in 3D](docs/screenshots/hq-3d.jpg) | ![Dispatch](docs/screenshots/dispatch.jpg) |
-| **Randomize scenario (pins are kept)** | **Schedule / Gantt** |
-| ![Randomize](docs/screenshots/randomize.jpg) | ![Schedule](docs/screenshots/schedule.jpg) |
+| ![HQ in 3D](docs/screenshots/hq-3d.jpg) | ![Yard close-up](docs/screenshots/hq-closeup.jpg) |
+| **Dispatch board** | **Randomize scenario (pins are kept)** |
+| ![Dispatch](docs/screenshots/dispatch.jpg) | ![Randomize](docs/screenshots/randomize.jpg) |
+| **Schedule / Gantt** | **Dark ops mode** |
+| ![Schedule](docs/screenshots/schedule.jpg) | ![Dark mode](docs/screenshots/dark-hq.jpg) |
 
 ## Quick start
 
@@ -52,6 +54,13 @@ Production: `npm run build && npm start` (one process on `PORT`, default 8787, w
 
 **Schedule** (`3`): a Gantt chart of departures and returns per vehicle, with the actual en-route, on-site and returning times from GPS and a live "now" line. Drag a bar to move a run, or drag its edges to change the times.
 
+**Data** (`4`): this is where your real data goes in.
+- **Projects**: name, client, address (address search or a pin on the map), status, priority, crew needed, colour, dates.
+- **Crew**: role, driving licences, home depot, status (sick, vacation and training people are never randomized), phone.
+- **Vehicles**: call sign, plate, type, 1–4 seats, licence class, home depot, FleetGO id.
+
+Changes go live on every open screen. To start without the demo data, run `TRACKLIV_SEED=empty` on a fresh install.
+
 **Tracking.** A geofence state machine moves each run through its stages automatically from the GPS positions:
 - *departed* when the vehicle leaves its HQ (110 m geofence),
 - *on site* within 250 m of the destination,
@@ -60,12 +69,12 @@ Production: `npm run build && npm start` (one process on `PORT`, default 8787, w
 
 It raises alerts when a crewed vehicle hasn't left 15 minutes after its planned time, or leaves without an assignment.
 
-Also: a command palette (`⌘K`), dark "ops" mode, and live multi-user updates over SSE (several dispatchers can work at once, with optimistic updates and conflict retry).
+Also: a command palette (`⌘K`), dark "ops" mode, and live multi-user updates over SSE (several dispatchers can work at once, with optimistic updates and conflict retry). There's also an optional *Street detail (online)* map layer: greyed OpenStreetMap tiles for zooming into project sites. You can point it at your own tile provider with `VITE_STREET_TILES`.
 
 | Key | Action |
 | --- | --- |
 | `⌘K` / `/` | Search & commands |
-| `1` `2` `3` | Map / Dispatch / Schedule |
+| `1` `2` `3` `4` | Map / Dispatch / Schedule / Data |
 | `R` | Randomize (preview) |
 | `F` | Fit all projects |
 | `⌘Z` / `⌘⇧Z` | Undo / redo |
@@ -117,7 +126,17 @@ apps/web        React 19 + Vite + Tailwind 4. MapLibre GL renders the offline ba
 scripts/geo     Overture extraction pipeline (Python).
 ```
 
-`npm test` runs the domain and FleetGO tests. `npm run typecheck` checks all packages. `npm run screenshot -- out.png` captures the running app with headless Chromium.
+- `npm test`: unit tests for the assignment rules, the randomizer (fuzzed over 300 seeds), geofence stages, routing and FleetGO parsing.
+- `npm run e2e`: builds the app, starts a throw-away server and drives the real UI in headless Chromium:
+  - drag & drop,
+  - the destination picker and custom destinations,
+  - send-to-task & pin,
+  - randomize and undo,
+  - schedule drag,
+  - creating a project with a map pin,
+  - map selection and the command palette.
+- `npm run typecheck`: checks all packages.
+- `npm run screenshot -- out.png`: captures the running app.
 
 ## Licences & attribution
 

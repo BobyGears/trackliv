@@ -4,6 +4,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // one .env at the repo root for server and web (only VITE_* reaches the browser)
+  envDir: '../..',
   server: {
     port: 5173,
     proxy: {
