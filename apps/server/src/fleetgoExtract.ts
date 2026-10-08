@@ -258,6 +258,35 @@ export function shapeOf(v: unknown, depth = 0, maxKeys = 14): string {
   return typeof v;
 }
 
+/**
+ * Messages in one websocket frame. SignalR (ASP.NET Core) separates messages with \x1e and carries data
+ * in "arguments"; the older ASP.NET SignalR sends {C, M:[{H, M, A:[…]}]} (hub calls) or {I, R} (results).
+ * Returns null when the frame is not JSON.
+ */
+export function framePayloads(payload: string): unknown[] | null {
+  const out: unknown[] = [];
+  let parsed = false;
+  for (const part of payload.split('\x1e')) {
+    if (!part.trim()) continue;
+    let msg: unknown;
+    try {
+      msg = JSON.parse(part);
+    } catch {
+      continue;
+    }
+    parsed = true;
+    if (!isObj(msg)) {
+      out.push(msg);
+      continue;
+    }
+    if (msg.arguments !== undefined) out.push(msg.arguments);
+    else if (Array.isArray(msg.M)) for (const call of msg.M) out.push(isObj(call) && call.A !== undefined ? call.A : call);
+    else if (msg.R !== undefined) out.push(msg.R);
+    else out.push(msg);
+  }
+  return parsed ? out : null;
+}
+
 /** URL without secrets: query values of token-like keys (or long values) are replaced by "…". */
 export function redactUrl(raw: string): string {
   try {

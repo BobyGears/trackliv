@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coordsOf, extractVehicles, maskUser, normalizeRecord, parseTime, redactUrl, shapeOf } from './fleetgoExtract.ts';
+import { coordsOf, extractVehicles, framePayloads, maskUser, normalizeRecord, parseTime, redactUrl, shapeOf } from './fleetgoExtract.ts';
 
 const vehicle = (i: number, extra: Record<string, unknown> = {}) => ({
   id: 100 + i,
@@ -54,5 +54,14 @@ describe('FleetGO dashboard data', () => {
     expect(shapeOf({ data: { items: [vehicle(0)] }, token: 'abc' })).toBe('{data:{items:[1× {id, licensePlate, lastPosition:{latitude, longitude, timestamp}, speed}]}, token}');
     expect(redactUrl('https://app.fleetgo.com/api/query?groupId=0&access_token=eyJhbGciOi&x=1')).toBe('https://app.fleetgo.com/api/query?groupId=0&access_token=…&x=1');
     expect(maskUser('m.duranoglu@example.de')).toBe('m…@example.de');
+  });
+});
+
+describe('websocket frames', () => {
+  it('reads ASP.NET Core and classic ASP.NET SignalR messages', () => {
+    expect(framePayloads('{"type":1,"target":"positions","arguments":[{"a":1}]}\x1e{"type":6}\x1e')).toEqual([[{ a: 1 }], { type: 6 }]);
+    expect(framePayloads('{"C":"d-1","M":[{"H":"mapHub","M":"update","A":[[{"plate":"MTK-TE 840"}]]}]}')).toEqual([[[{ plate: 'MTK-TE 840' }]]]);
+    expect(framePayloads('{"I":"0","R":{"vehicles":[]}}')).toEqual([{ vehicles: [] }]);
+    expect(framePayloads('o')).toBeNull();
   });
 });

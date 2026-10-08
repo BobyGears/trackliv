@@ -6,7 +6,7 @@
 import { randomBytes } from 'node:crypto';
 import express from 'express';
 
-export async function startFleetGoMock({ username = 'dispo@example.de', password = 'right-password', appPort = 0, loginPort = 0 } = {}) {
+export async function startFleetGoMock({ username = 'dispo@example.de', password = 'right-password', appPort = 0, loginPort = 0, unreadableMap = false } = {}) {
   const sessions = new Set();
   const codes = new Set();
   const antiForgery = randomBytes(8).toString('hex');
@@ -91,6 +91,8 @@ export async function startFleetGoMock({ username = 'dispo@example.de', password
     }
     stats.vehicleQueries++;
     tick++;
+    // a map format TrackLiv cannot read (for trying out the report)
+    if (unreadableMap) return res.json({ markers: [101, 102, 103].map((id) => ({ k: `MTK-DT ${id}`, p: '50.0;8.4', s: 0 })) });
     res.json({ success: true, data: { total: 3, items: [101, 102, 103].map((id, i) => ({
       id,
       licensePlate: `MTK-DT ${id}`,

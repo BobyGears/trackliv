@@ -8,7 +8,7 @@ import { maskUser } from './fleetgoExtract.ts';
 const cfg = config.fleetgo;
 const waitSeconds = Number(process.argv[2] ?? 75);
 
-console.log(`TrackLiv · FleetGO check`);
+console.log(`TrackLiv · FleetGO check (v4: menu search, report per page)`);
 console.log(`  dashboard: ${cfg.dashboardUrl}${cfg.dashboardPage ? ` (then ${cfg.dashboardPage})` : ''}`);
 console.log(`  user:      ${cfg.username ? maskUser(cfg.username) : '(FLEETGO_USERNAME missing)'}`);
 console.log(`  password:  ${cfg.password ? 'set' : '(FLEETGO_PASSWORD missing)'}`);
@@ -32,11 +32,19 @@ try {
   }
   const st = dash.status();
   console.log('');
-  console.log(`Requests with data the dashboard made (best vehicle candidates first):`);
-  for (const o of st.observed.slice(0, 25)) {
-    const tag = o.vehicles && o.score ? `${o.vehicles} vehicle(s), score ${o.score}` : '–';
-    console.log(`  ${String(o.status).padEnd(4)}${o.method.padEnd(5)}${o.url}`);
-    console.log(`        ${tag} · ${o.status === 200 && o.detail.length > 2 ? o.detail : o.shape}`);
+  console.log(`What the dashboard loaded, page by page (field names only, never values):`);
+  // pages in the order they were opened; within a page the best vehicle candidates first
+  const pages = new Map<string, typeof st.observed>();
+  for (const o of [...st.observed].sort((a, b) => a.at - b.at)) pages.set(o.page, [...(pages.get(o.page) ?? []), o]);
+  const order = [...pages.entries()].sort((a, b) => Math.min(...a[1].map((o) => o.at)) - Math.min(...b[1].map((o) => o.at)));
+  for (const [where, list] of order) {
+    console.log('');
+    console.log(`  On ${where || 'the start page'}:`);
+    for (const o of list.sort((a, b) => b.score - a.score || a.at - b.at).slice(0, 40)) {
+      const tag = o.vehicles && o.score ? `${o.vehicles} vehicle(s), score ${o.score}` : '–';
+      console.log(`    ${String(o.status).padEnd(4)}${o.method.padEnd(5)}${o.url}`);
+      console.log(`          ${tag} · ${o.status < 300 && o.detail.length > 2 ? o.detail : o.shape}`);
+    }
   }
   if (!st.observed.length) console.log('  (none – the dashboard did not request any data)');
   if (st.tried.length) {

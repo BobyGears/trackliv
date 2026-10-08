@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Browser, BrowserContext, Page, Request, Response } from 'playwright-core';
 import { config } from './config.ts';
 import type { FleetGoEquipment } from './fleetgo.ts';
-import { extractVehicles, maskUser, redactUrl, shapeOf } from './fleetgoExtract.ts';
+import { extractVehicles, framePayloads, maskUser, redactUrl, shapeOf } from './fleetgoExtract.ts';
 
 /**
  * FleetGO via the web dashboard – like signing in by hand.
@@ -122,6 +122,8 @@ export interface ObservedRequest {
   vehicles: number;
   score: number;
   at: number;
+  /** the dashboard page it was seen on */
+  page: string;
 }
 
 interface Recipe {
@@ -153,6 +155,9 @@ export class FleetGoDashboard {
   private vehiclePage = '';
   private menu: MenuEntry[] = [];
   private tried: { entry: string; found: number }[] = [];
+  /** the page (or menu entry) the dashboard is on – for the report */
+  private where = '';
+  private wsFrames = new Map<string, { frames: number; json: number }>();
 
   constructor(
     private cfg: Cfg = config.fleetgo,
@@ -239,18 +244,19 @@ export class FleetGoDashboard {
     this.page.setDefaultTimeout(45_000);
     this.page.on('response', (r) => void this.onResponse(r));
     this.page.on('websocket', (ws) => {
+      const url = redactUrl(ws.url()).split('?')[0];
+      const count = { frames: 0, json: 0 };
+      this.wsFrames.set(url, count);
+      this.note('WS', url, 101, '(websocket opened, no data yet)', 0, 0);
       ws.on('framereceived', ({ payload }) => {
-        if (typeof payload !== 'string') return;
-        // SignalR separates messages with \x1e; invocations carry their data in "arguments"
-        for (const part of payload.split('\x1e')) {
-          if (!part.trim()) continue;
-          try {
-            const msg = JSON.parse(part) as { arguments?: unknown; target?: string };
-            this.ingest(msg.arguments ?? msg, `ws ${redactUrl(ws.url())}${msg.target ? ` ${msg.target}` : ''}`, 'WS', 101);
-          } catch {
-            /* not JSON */
-          }
+        count.frames++;
+        const messages = typeof payload === 'string' ? framePayloads(payload) : null;
+        if (!messages) {
+          if (!count.json) this.note('WS', url, 101, `(${count.frames} ${typeof payload === 'string' ? 'text' : 'binary'} frame(s), not JSON)`, 0, 0);
+          return;
         }
+        count.json++;
+        for (const m of messages) this.ingest(m, `ws ${url}`, 'WS', 101);
       });
     });
     this.page.on('framenavigated', (frame) => {
@@ -300,6 +306,7 @@ export class FleetGoDashboard {
     }
     this.signedIn = true;
     this.lastReload = Date.now();
+    this.where = this.pagePath().split('?')[0];
     this.log(`signed in (${redactUrl(page.url())})`);
     if (!this.cfg.dashboardPage) await this.findVehiclePage();
   }
@@ -330,6 +337,7 @@ export class FleetGoDashboard {
     for (const c of candidates) {
       if (Date.now() > deadline || !this.page || this.page.isClosed()) break;
       const name = c.text ? `"${c.text}"${c.path ? ` (${c.path})` : ''}` : c.path;
+      this.where = c.text ? `"${c.text}"` : c.path.split('?')[0];
       try {
         if (c.path) await page.goto(new URL(c.path, this.cfg.dashboardUrl).href, { waitUntil: 'domcontentloaded' });
         else await page.getByText(c.text, { exact: true }).first().click({ timeout: 8_000 });
@@ -349,7 +357,14 @@ export class FleetGoDashboard {
         this.tried.push({ entry: name, found: -1 });
       }
     }
-    if (!this.source && this.page && !this.page.isClosed() && this.page.url() !== start) {
+    // nothing recognised: stay on the most likely page (the first one tried, e.g. the map) rather than the
+    // start page – reloading it is the best chance to catch the positions, and the report shows where it is
+    const best = candidates.find((c) => c.path);
+    if (!this.source && best && this.page && !this.page.isClosed()) {
+      this.where = best.text ? `"${best.text}"` : best.path.split('?')[0];
+      await page.goto(new URL(best.path, this.cfg.dashboardUrl).href, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+    } else if (!this.source && this.page && !this.page.isClosed() && this.page.url() !== start) {
       await page.goto(start, { waitUntil: 'domcontentloaded' }).catch(() => {});
     }
   }
@@ -413,6 +428,10 @@ export class FleetGoDashboard {
   private async onResponse(resp: Response) {
     try {
       const req: Request = resp.request();
+      if (req.resourceType() === 'eventsource') {
+        this.note('GET', redactUrl(resp.url()).split('?')[0], resp.status(), '(event stream – its messages cannot be read here)', 0, 0);
+        return;
+      }
       if (!['xhr', 'fetch'].includes(req.resourceType())) return;
       const ct = resp.headers()['content-type'] ?? '';
       if (!ct.includes('json') || resp.status() !== 200) {
@@ -437,8 +456,11 @@ export class FleetGoDashboard {
 
   private note(method: string, url: string, status: number, shape: string, vehicles: number, score: number, detail = shape) {
     const key = `${method} ${url}`;
-    this.observed.set(key, { method, url, status, shape, detail, vehicles, score, at: Date.now() });
-    if (this.observed.size > 80) this.observed.delete(this.observed.keys().next().value!);
+    const page = this.where || (this.page && !this.page.isClosed() ? this.pagePath().split('?')[0] : '');
+    // the same request on another page is listed again (keyed by page too)
+    this.observed.delete(`${key} @${page}`);
+    this.observed.set(`${key} @${page}`, { method, url, status, shape, detail, vehicles, score, at: Date.now(), page });
+    if (this.observed.size > 250) this.observed.delete(this.observed.keys().next().value!);
   }
 
   /** Take vehicles from a JSON document if it is the (best) vehicle source. Returns true if used. */
