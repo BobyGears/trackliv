@@ -4,6 +4,7 @@ import { MapView } from './map/MapView';
 import { CommandPalette } from './ui/CommandPalette';
 import { DataView } from './ui/DataView';
 import { DispatchBoard } from './ui/DispatchBoard';
+import { LoginScreen } from './ui/LoginScreen';
 import { KpiCards } from './ui/KpiCards';
 import { MapControls } from './ui/MapControls';
 import { ObjectPanel } from './ui/ObjectPanel';
@@ -14,14 +15,18 @@ import { TopBar } from './ui/TopBar';
 import { TrackingCard } from './ui/TrackingCard';
 
 export function App() {
+  const auth = useStore((s) => s.auth);
   const ready = useStore((s) => s.ready);
   const error = useStore((s) => s.error);
   const theme = useStore((s) => s.theme);
   const view = useStore((s) => s.view);
   useShortcuts();
   useEffect(() => {
-    void useStore.getState().init();
+    void useStore.getState().checkAuth();
   }, []);
+  useEffect(() => {
+    if (auth === 'ok' && !ready) void useStore.getState().init();
+  }, [auth, ready]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0a0f16' : '#eaeef4');
@@ -40,6 +45,7 @@ export function App() {
       </div>
     );
   }
+  if (auth === 'signed-out') return <LoginScreen />;
   if (!ready) {
     return (
       <div className="grid h-full place-items-center">

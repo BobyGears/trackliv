@@ -9,3 +9,6 @@ test-results/
 /screenshots/
 scripts/geo/.cache/
 __pycache__/
+
+# deploy target (kept out of git – the repository is public)
+deploy/server.env

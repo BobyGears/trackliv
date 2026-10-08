@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DayPlan, OpsEvent, Person, Project, Vehicle } from '@trackliv/core';
 import { config } from './config.ts';
@@ -45,6 +45,23 @@ class Db {
     writeFileSync(tmp, JSON.stringify(this.data));
     renameSync(tmp, FILE);
   }
+
+  /** One copy per day in <data>/backups (kept for 30 days). */
+  snapshot() {
+    if (!existsSync(FILE)) return;
+    const dir = join(config.dataDir, 'backups');
+    mkdirSync(dir, { recursive: true });
+    const name = `db-${new Date().toISOString().slice(0, 10)}.json`;
+    if (!existsSync(join(dir, name))) copyFileSync(FILE, join(dir, name));
+    const old = readdirSync(dir)
+      .filter((f) => /^db-\d{4}-\d{2}-\d{2}\.json$/.test(f))
+      .sort()
+      .slice(0, -30);
+    for (const f of old) unlinkSync(join(dir, f));
+  }
 }
 
 export const db = new Db();
+
+db.snapshot();
+setInterval(() => db.snapshot(), 6 * 3600 * 1000).unref();

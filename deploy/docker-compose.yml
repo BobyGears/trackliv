@@ -1,0 +1,39 @@
+# TrackLiv on the shared server, behind Registra Atlas' Caddy (network atlas-edge).
+# Started by ./deploy.sh – by hand:
+#   cd /opt/trackliv/app && docker compose --env-file /opt/trackliv/.env -f deploy/docker-compose.yml up -d --build
+name: trackliv
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  app:
+    build:
+      context: ..
+      args:
+        VITE_STREET_TILES: ${VITE_STREET_TILES:-}
+    image: trackliv:latest
+    container_name: trackliv-app
+    restart: unless-stopped
+    init: true
+    # run as the deploy user so the data folder on the host stays writable for backups/scripts
+    user: "${TRACKLIV_UID:-1000}:${TRACKLIV_GID:-1000}"
+    env_file: ${TRACKLIV_HOME:-/opt/trackliv}/.env
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      TRACKLIV_DATA_DIR: /data
+    volumes:
+      - ${TRACKLIV_HOME:-/opt/trackliv}/data:/data
+    # no ports: only reachable through Caddy as trackliv-app:8787
+    networks:
+      - edge
+    logging: *logging
+
+networks:
+  edge:
+    name: ${TRACKLIV_EDGE_NETWORK:-atlas-edge}
+    external: true

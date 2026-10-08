@@ -1,5 +1,5 @@
 import { isAtDepot } from '@trackliv/core';
-import { Bell, CalendarRange, ChevronDown, Database, Gauge, Map as MapIcon, Moon, Search, Sun, Users, Warehouse } from 'lucide-react';
+import { Bell, CalendarRange, ChevronDown, Database, Gauge, LogOut, Map as MapIcon, Moon, Search, Sun, Users, Warehouse } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useOpsNow } from '../lib/derived';
 import { fmtAgo, fmtDate, fmtTimeSec } from '../lib/format';
@@ -146,6 +146,71 @@ function LiveClock() {
   );
 }
 
+function UserMenu() {
+  const authEnabled = useStore((s) => s.authEnabled);
+  const signedIn = useStore((s) => s.user);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const [local, setLocal] = useState(() => {
+    try {
+      return localStorage.getItem('trackliv:user') || 'Dispatcher';
+    } catch {
+      return 'Dispatcher';
+    }
+  });
+  useEffect(() => {
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, []);
+  const user = authEnabled ? (signedIn ?? '') : local;
+  const initials = user
+    .split(' ')
+    .map((s) => s[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <div ref={ref} className="relative">
+      <button
+        className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-panel-3"
+        title={authEnabled ? `Signed in as ${user}` : 'Click to set your name (shown in the audit log)'}
+        onClick={() => {
+          if (authEnabled) return setOpen(!open);
+          const name = prompt('Your name for the audit log', local);
+          if (name) {
+            try {
+              localStorage.setItem('trackliv:user', name);
+            } catch {
+              /* ignore */
+            }
+            setLocal(name);
+          }
+        }}
+      >
+        <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-slate-500 to-slate-700 text-[12px] font-bold text-white">{initials || '?'}</span>
+        <span className="hidden whitespace-nowrap text-left leading-tight 2xl:block">
+          <span className="block text-[12px] font-semibold">{user}</span>
+          <span className="block text-[10.5px] text-muted">Operations</span>
+        </span>
+      </button>
+      {open && (
+        <Panel className="fade-in absolute right-0 top-11 z-50 w-56 p-1.5 shadow-float">
+          <div className="px-2.5 py-1.5 text-[11.5px] text-muted">
+            Signed in as <span className="font-semibold text-ink">{user}</span>
+          </div>
+          <button
+            onClick={() => useStore.getState().logout()}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left font-semibold text-danger hover:bg-danger-weak"
+          >
+            <LogOut size={14} /> Sign out
+          </button>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
 function PlanDateChip() {
   const date = useStore((s) => s.date);
   const today = useStore((s) => s.today);
@@ -169,13 +234,6 @@ export function TopBar() {
   const toggleTheme = useStore((s) => s.toggleTheme);
   const unread = useStore((s) => s.unread);
   const eventsOpen = useStore((s) => s.eventsOpen);
-  const [user, setUser] = useState(() => {
-    try {
-      return localStorage.getItem('trackliv:user') || 'Dispatcher';
-    } catch {
-      return 'Dispatcher';
-    }
-  });
   return (
     <Panel className="pointer-events-auto absolute inset-x-3 top-3 z-30 flex h-[52px] items-center gap-3 px-2.5">
       <Logo />
@@ -215,34 +273,7 @@ export function TopBar() {
           </span>
         )}
       </div>
-      <button
-        className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-panel-3"
-        title="Click to change your name (shown in the audit log)"
-        onClick={() => {
-          const name = prompt('Your name for the audit log', user);
-          if (name) {
-            try {
-              localStorage.setItem('trackliv:user', name);
-            } catch {
-              /* ignore */
-            }
-            setUser(name);
-          }
-        }}
-      >
-        <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-slate-500 to-slate-700 text-[12px] font-bold text-white">
-          {user
-            .split(' ')
-            .map((s) => s[0])
-            .join('')
-            .slice(0, 2)
-            .toUpperCase()}
-        </span>
-        <span className="hidden whitespace-nowrap text-left leading-tight 2xl:block">
-          <span className="block text-[12px] font-semibold">{user}</span>
-          <span className="block text-[10.5px] text-muted">Operations</span>
-        </span>
-      </button>
+      <UserMenu />
     </Panel>
   );
 }

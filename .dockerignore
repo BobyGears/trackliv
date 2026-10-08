@@ -1,0 +1,11 @@
+**/node_modules
+apps/web/dist
+.git
+.env
+deploy/server.env
+apps/server/var
+screenshots
+docs
+test-results
+scripts/geo/.cache
+**/__pycache__

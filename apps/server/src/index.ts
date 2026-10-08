@@ -20,6 +20,16 @@ import {
   type Project,
   type Vehicle,
 } from '@trackliv/core';
+import {
+  createAuth,
+  issueSession,
+  loginRateLimited,
+  noteFailedLogin,
+  requireSession,
+  sessionUser,
+  setSessionCookie,
+  verifyPassword,
+} from './auth.ts';
 import { db } from './db.ts';
 import { startFleetGoSync } from './fleetSync.ts';
 import { routeBetween, siteGeo, sites } from './geodata.ts';
@@ -43,6 +53,8 @@ if (!live && config.seed === 'demo') {
   const date = ops.today();
   if (!db.data.plans[date]) seedDemoPlan(date);
 }
+db.flush();
+db.snapshot();
 
 function seedDemoPlan(date: string) {
   const ctx = { vehicles: db.data.vehicles, people: db.data.people, projects: db.data.projects, sites };
@@ -63,19 +75,94 @@ function seedDemoPlan(date: string) {
 ops.clock.setSpeed(live ? 1 : config.simulator.speed);
 
 // ---------------------------------------------------------------------------------------------
+const auth = createAuth(process.env);
+if (config.production && !auth.enabled && process.env.TRACKLIV_AUTH !== 'off') {
+  console.error('[trackliv] Refusing to start in production without users. Set TRACKLIV_USERS="Name:password,…" in .env');
+  console.error('           (or TRACKLIV_AUTH=off if the server is only reachable from a private network).');
+  process.exit(1);
+}
+if (auth.enabled && !/^[0-9a-f]{32,}$/i.test(process.env.TRACKLIV_SESSION_SECRET ?? '')) {
+  console.warn('[auth] TRACKLIV_SESSION_SECRET not set – using a random one, everybody is signed out on restart');
+}
+
 const app = express();
 app.disable('x-powered-by');
+// Behind Caddy / nginx (Docker network or localhost): trust X-Forwarded-* for client IP and https.
+app.set('trust proxy', 'loopback, uniquelocal');
 app.use(express.json({ limit: '2mb' }));
 
-const actorOf = (req: Request) => String(req.header('x-trackliv-user') ?? 'dispatcher').slice(0, 60);
+if (config.production) {
+  const tileOrigin = (() => {
+    try {
+      return new URL((process.env.VITE_STREET_TILES ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png').replace(/[{}]/g, '')).origin;
+    } catch {
+      return '';
+    }
+  })();
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: ${tileOrigin}`,
+    `connect-src 'self' ${tileOrigin}`,
+    "worker-src 'self' blob:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+  app.use((_req, res, next) => {
+    res.set({
+      'Content-Security-Policy': csp,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    });
+    next();
+  });
+}
+
+// --- login -----------------------------------------------------------------------------------
+app.get('/api/auth/me', (req, res) => {
+  res.json({ authEnabled: auth.enabled, user: auth.enabled ? sessionUser(auth, req) : null });
+});
+app.post('/api/auth/login', (req, res) => {
+  const ip = req.ip ?? 'unknown';
+  if (loginRateLimited(ip)) return void res.status(429).json({ error: 'Too many attempts – try again in 15 minutes' });
+  const name = String(req.body?.username ?? '').trim();
+  const password = String(req.body?.password ?? '');
+  const match = [...auth.users.entries()].find(([u]) => u.toLowerCase() === name.toLowerCase());
+  if (!auth.enabled || !match || !verifyPassword(match[1], password)) {
+    noteFailedLogin(ip);
+    return void res.status(401).json({ error: 'Wrong name or password' });
+  }
+  setSessionCookie(req, res, issueSession(auth, match[0]));
+  ops.log({ kind: 'system', severity: 'info', title: `${match[0]} signed in` });
+  res.json({ user: match[0] });
+});
+app.post('/api/auth/logout', (req, res) => {
+  setSessionCookie(req, res, null);
+  res.json({ ok: true });
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, mode: live ? 'fleetgo' : 'simulator', serverTime: ops.nowISO() });
+});
+app.use('/api', requireSession(auth));
+
+const actorOf = (req: Request, res?: Response) =>
+  String(res?.locals.user ?? req.header('x-trackliv-user') ?? 'dispatcher').slice(0, 60);
 const dateParam = (s: unknown) => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ops.today());
 const hhmm = (ms: number) => {
   const d = new Date(ms);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, mode: live ? 'fleetgo' : 'simulator', clients: clientCount(), serverTime: ops.nowISO() });
+app.get('/api/status', (_req, res) => {
+  res.json({ ok: true, mode: live ? 'fleetgo' : 'simulator', clients: clientCount(), fleet: ops.fleet, serverTime: ops.nowISO() });
 });
 
 app.get('/api/bootstrap', (req, res) => {
@@ -110,10 +197,10 @@ app.put('/api/plans/:date', (req, res) => {
   const ctx = { vehicles: db.data.vehicles, people: db.data.people, projects: db.data.projects, sites };
   const errors = validatePlan(assignments, ctx).filter((i) => i.severity === 'error');
   if (errors.length) return void res.status(422).json({ error: errors.map((e) => e.message).join('; '), issues: errors });
-  const r = ops.savePlan(date, assignments, { baseRevision, actor: actorOf(req) });
+  const r = ops.savePlan(date, assignments, { baseRevision, actor: actorOf(req, res) });
   if (!r.ok) return void res.status(409).json({ error: 'Plan changed in the meantime', plan: r.plan });
   if (reason) {
-    ops.log({ kind: reason.startsWith('Randomized') ? 'randomize' : 'assignment', severity: 'info', title: reason, detail: `by ${actorOf(req)}` });
+    ops.log({ kind: reason.startsWith('Randomized') ? 'randomize' : 'assignment', severity: 'info', title: reason, detail: `by ${actorOf(req, res)}` });
   }
   res.json(r.plan);
 });
@@ -126,8 +213,8 @@ function patchAssignment(req: Request, res: Response, fn: (a: Assignment, now: n
   const plan = ops.plan(date);
   const now = ops.clock.now();
   const assignments = plan.assignments.map((a) => (a.vehicleId === vehicleId ? fn(a, now) : a));
-  const r = ops.savePlan(date, assignments, { force: true, actor: actorOf(req) });
-  ops.log({ kind: 'assignment', severity: 'info', title: title(vehicle.callsign), detail: `by ${actorOf(req)}`, refs: { vehicleId } });
+  const r = ops.savePlan(date, assignments, { force: true, actor: actorOf(req, res) });
+  ops.log({ kind: 'assignment', severity: 'info', title: title(vehicle.callsign), detail: `by ${actorOf(req, res)}`, refs: { vehicleId } });
   res.json(r.plan);
 }
 

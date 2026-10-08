@@ -52,17 +52,28 @@ const user = () => {
   }
 };
 
+/** Fired when the server says the session is missing or expired. */
+export const UNAUTHORIZED_EVENT = 'trackliv:unauthorized';
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-TrackLiv-User': user() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !url.startsWith('/api/auth/')) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   if (!res.ok) throw new ApiError((data as { error?: string }).error ?? `HTTP ${res.status}`, res.status, data);
   return data as T;
 }
+
+export const authApi = {
+  me: () => req<{ authEnabled: boolean; user: string | null }>('GET', '/api/auth/me'),
+  login: (username: string, password: string) => req<{ user: string }>('POST', '/api/auth/login', { username, password }),
+  logout: () => req<{ ok: boolean }>('POST', '/api/auth/logout'),
+};
 
 export const api = {
   bootstrap: (date?: string) => req<BootstrapResponse>('GET', `/api/bootstrap${date ? `?date=${date}` : ''}`),

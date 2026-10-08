@@ -24,7 +24,7 @@ open http://localhost:5173
 
 Requires Node 20+. Without FleetGO credentials it starts in **simulator mode**. The demo fleet then drives the real road network on a randomized demo plan for today. On restart the simulator replays the day so far, so positions, stages and the event log stay consistent.
 
-Production: `npm run build && npm start` (one process on `PORT`, default 8787, which serves both the API and the built web app).
+Production: `npm run build && npm start` (one process on `PORT`, default 8787, which serves both the API and the built web app). In production a login is required: see [Logins](#logins).
 
 ## What you can do
 
@@ -99,7 +99,7 @@ FleetGO issues API keys on request (info@fleetgo.com). The server logs in with `
 
 ## Data
 
-- **Master data, plans and the audit log** live in `apps/server/var/db.json`. On first start, `TRACKLIV_SEED=demo` fills it with demo crew, vehicles and projects. The demo project locations are real Rhein-Main streets (no house numbers); the names and clients are fictional. To start from scratch, delete the file or set `TRACKLIV_SEED=empty`.
+- **Master data, plans and the audit log** live in `apps/server/var/db.json` (on the server: `/opt/trackliv/data/db.json`). On first start, `TRACKLIV_SEED=demo` fills it with demo crew, vehicles and projects. The demo project locations are real Rhein-Main streets (no house numbers); the names and clients are fictional. To start from scratch, delete the file or set `TRACKLIV_SEED=empty`.
 - **Geodata** (`data/geo/`) is generated from [Overture Maps](https://overturemaps.org) (release 2026-09-23):
   - `hq-*.geojson`: every building with height, streets, rail, yards and water within about 1 km of both HQs.
   - `region-*.geojson`: an offline Rhein-Main basemap (towns, motorways, primary and secondary roads, rail, rivers, forest and urban areas). No tile server or API key is needed.
@@ -114,6 +114,46 @@ FleetGO issues API keys on request (info@fleetgo.com). The server logs in with `
   python3 scripts/geo/build_geodata.py
   ```
 
+## Deploy to trackliv.dd-gruppe.de
+
+TrackLiv runs on our own server, next to Registra Atlas. It is one Docker container (`trackliv-app`), and the Caddy that already serves atlas.dd-gruppe.de also serves trackliv.dd-gruppe.de, with automatic TLS. A static host such as Netlify is not an option: the FleetGO poller, the simulator and the live stream (SSE) need a long-running server, and the plans are stored on disk.
+
+```bash
+./deploy.sh              # upload, build on the server (tests + type check run inside the build), start
+./deploy.sh --no-build   # upload + restart with the image already on the server (e.g. after editing .env)
+./deploy.sh --status     # container, health and the last log lines
+./deploy.sh --logs       # follow the log
+./deploy.sh --dry-run    # show what would be uploaded
+```
+
+On the first run the script asks for the SSH login and port (the same as for Registra Atlas) and saves them in `deploy/server.env`. That file is git-ignored.
+
+**Once, before the first deploy:**
+
+1. **DNS:** add an A record `trackliv.dd-gruppe.de` pointing to the server (check with `dig +short trackliv.dd-gruppe.de`).
+2. **Caddy:** Registra Atlas' Caddy has to load extra sites from `/opt/registra-atlas/deploy/sites/`. Apply [`deploy/registra-atlas-edge.patch`](deploy/registra-atlas-edge.patch) in the Registra Atlas repo (`git apply …/trackliv/deploy/registra-atlas-edge.patch`) and run its `./deploy.sh` once. The patch adds one `import` line to both Caddyfiles and mounts the `sites` folder; Atlas' own routing stays as it is. Until then `./deploy.sh` here still starts TrackLiv, but tells you the domain is not routed yet.
+
+**What lives on the server (`/opt/trackliv`):**
+
+| Path | What |
+| --- | --- |
+| `app/` | the uploaded source (replaced on every deploy) |
+| `.env` | settings and secrets (chmod 600, never uploaded or overwritten). Created from `.env.example` on the first deploy, with a generated `TRACKLIV_SESSION_SECRET` and an `Admin` login. The deploy prints the Admin password once. |
+| `data/db.json` | master data, plans and the audit log |
+| `data/backups/` | a daily copy (kept 30 days) and one before every deploy (last 20) |
+
+To switch from the simulator to live vehicles, put the FleetGO credentials into `/opt/trackliv/.env` and run `./deploy.sh --no-build`.
+
+### Logins
+
+`TRACKLIV_USERS` in the server `.env` lists who may sign in, as comma-separated `Name:password` pairs:
+
+```
+TRACKLIV_USERS=Admin:…,Boby:scrypt:…,Dispo 2:another-password
+```
+
+Passwords can be plain (the file is only readable by its owner) or a scrypt hash from `npm run hash-password`. Don't use `$` or `,` in plain passwords. Sessions last 30 days. Removing a name signs that person out at their next request. After changing the file, run `./deploy.sh --no-build`. Every change in the audit log is attributed to the signed-in name.
+
 ## Architecture
 
 ```
@@ -127,7 +167,8 @@ scripts/geo     Overture extraction pipeline (Python).
 ```
 
 - `npm test`: unit tests for the assignment rules, the randomizer (fuzzed over 300 seeds), geofence stages, routing and FleetGO parsing.
-- `npm run e2e`: builds the app, starts a throw-away server and drives the real UI in headless Chromium:
+- `npm run e2e`: builds the app, starts a throw-away production server and drives the real UI in headless Chromium:
+  - sign-in, sign-out and the security headers (CSP violations fail the run),
   - drag & drop,
   - the destination picker and custom destinations,
   - send-to-task & pin,

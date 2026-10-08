@@ -1,0 +1,59 @@
+diff --git a/deploy/Caddyfile b/deploy/Caddyfile
+index 79b927d..081f27e 100644
+--- a/deploy/Caddyfile
++++ b/deploy/Caddyfile
+@@ -19,6 +19,11 @@
+     }
+ }
+ 
++# Weitere Anwendungen auf diesem Server (z. B. TrackLiv, trackliv.dd-gruppe.de) legen hier je eine
++# eigene Site-Datei ab (deploy/sites/*.caddy, vom Deploy der jeweiligen Anwendung geschrieben und per
++# „caddy reload" ohne Ausfall geladen). Ein leerer Ordner ist erlaubt.
++import /etc/caddy/sites/*.caddy
++
+ atlas.dd-gruppe.de {
+     encode gzip
+ 
+diff --git a/deploy/Caddyfile.edge b/deploy/Caddyfile.edge
+index f93a1f8..c777df1 100644
+--- a/deploy/Caddyfile.edge
++++ b/deploy/Caddyfile.edge
+@@ -9,6 +9,11 @@
+     }
+ }
+ 
++# Weitere Anwendungen auf diesem Server (z. B. TrackLiv, trackliv.dd-gruppe.de) legen hier je eine
++# eigene Site-Datei ab (deploy/sites/*.caddy, vom Deploy der jeweiligen Anwendung geschrieben und per
++# „caddy reload" ohne Ausfall geladen). Ein leerer Ordner ist erlaubt.
++import /etc/caddy/sites/*.caddy
++
+ atlas.dd-gruppe.de {
+     encode gzip
+ 
+diff --git a/deploy/docker-compose.edge.yml b/deploy/docker-compose.edge.yml
+index 62edf0e..96061fa 100644
+--- a/deploy/docker-compose.edge.yml
++++ b/deploy/docker-compose.edge.yml
+@@ -30,6 +30,7 @@ services:
+     volumes:
+       - ./Caddyfile.edge:/etc/caddy/Caddyfile:ro
+       - ./active:/etc/caddy/active:ro     # deploy-bluegreen.sh schreibt hier die aktive Farbe
++      - ./sites:/etc/caddy/sites:ro       # Site-Dateien weiterer Anwendungen (z. B. TrackLiv)
+       - caddy-data:/data                  # TLS-Zertifikate — persistent
+       - caddy-config:/config
+     networks:
+diff --git a/deploy/docker-compose.web.yml b/deploy/docker-compose.web.yml
+index bbf61f8..3942ff6 100644
+--- a/deploy/docker-compose.web.yml
++++ b/deploy/docker-compose.web.yml
+@@ -32,6 +32,7 @@ services:
+       - "443:443"
+     volumes:
+       - ./Caddyfile:/etc/caddy/Caddyfile:ro
++      - ./sites:/etc/caddy/sites:ro   # Site-Dateien weiterer Anwendungen (z. B. TrackLiv)
+       - caddy-data:/data        # Zertifikate — unbedingt persistent
+       - caddy-config:/config
+     depends_on:
+diff --git a/deploy/sites/.gitkeep b/deploy/sites/.gitkeep
+new file mode 100644
+index 0000000..e69de29

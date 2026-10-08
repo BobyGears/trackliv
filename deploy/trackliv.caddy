@@ -1,0 +1,17 @@
+# TrackLiv – site block for the shared Caddy on the server.
+# ./deploy.sh copies this file into the Caddy "sites" folder and reloads Caddy.
+# TLS certificates are fetched automatically (Let's Encrypt).
+trackliv.dd-gruppe.de {
+	# live updates (server-sent events) must not be compressed or buffered
+	@compressible not path /api/stream
+	encode @compressible zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	reverse_proxy trackliv-app:8787 {
+		flush_interval -1
+	}
+}

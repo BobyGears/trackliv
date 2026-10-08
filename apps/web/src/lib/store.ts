@@ -20,7 +20,7 @@ import {
   type Vehicle,
 } from '@trackliv/core';
 import { create } from 'zustand';
-import { ApiError, api, openStream, type ClockSnapshot, type SiteGeo } from './api';
+import { ApiError, UNAUTHORIZED_EVENT, api, authApi, openStream, type ClockSnapshot, type SiteGeo } from './api';
 
 export type ObjectType = 'vehicle' | 'person' | 'project' | 'site';
 export interface Selection {
@@ -52,6 +52,10 @@ export interface MapPick {
 }
 
 interface State {
+  /** 'checking' → 'signed-out' (login screen) | 'ok' (app). */
+  auth: 'checking' | 'signed-out' | 'ok';
+  authEnabled: boolean;
+  user: string | null;
   ready: boolean;
   error?: string;
   connected: boolean;
@@ -94,6 +98,9 @@ interface State {
 }
 
 interface Actions {
+  checkAuth(): Promise<void>;
+  login(username: string, password: string): Promise<string | null>;
+  logout(): Promise<void>;
   init(): Promise<void>;
   setView(v: View): void;
   select(s: Selection | null, opts?: { focus?: boolean }): void;
@@ -159,7 +166,12 @@ function restoreEditable(current: Assignment[], snapshot: Assignment[]): Assignm
   });
 }
 
+let closeStream: (() => void) | null = null;
+
 export const useStore = create<State & Actions>()((set, get) => ({
+  auth: 'checking',
+  authEnabled: false,
+  user: null,
   ready: false,
   connected: false,
   mode: 'simulator',
@@ -199,6 +211,37 @@ export const useStore = create<State & Actions>()((set, get) => ({
   scenarioOptions: { ...DEFAULT_RANDOMIZE_OPTIONS, seed: randomSeed() },
   personSelection: [],
 
+  async checkAuth() {
+    try {
+      const me = await authApi.me();
+      set({ authEnabled: me.authEnabled, user: me.user, auth: !me.authEnabled || me.user ? 'ok' : 'signed-out' });
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+
+  async login(username, password) {
+    try {
+      const r = await authApi.login(username, password);
+      try {
+        localStorage.setItem('trackliv:user', r.user);
+      } catch {
+        /* ignore */
+      }
+      set({ user: r.user, auth: 'ok' });
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  },
+
+  async logout() {
+    await authApi.logout().catch(() => undefined);
+    closeStream?.();
+    closeStream = null;
+    set({ user: null, auth: 'signed-out', ready: false });
+  },
+
   async init() {
     try {
       const t0 = Date.now();
@@ -226,7 +269,8 @@ export const useStore = create<State & Actions>()((set, get) => ({
         fleet: b.fleet,
       });
       void get().refreshRoutes();
-      openStream({
+      closeStream?.();
+      closeStream = openStream({
         telemetry: (list) =>
           set((s) => {
             const telemetry = { ...s.telemetry };
@@ -473,6 +517,18 @@ export const useStore = create<State & Actions>()((set, get) => ({
     return clock.opsEpoch + (Date.now() + skewMs - clock.realEpoch) * clock.speed;
   },
 }));
+
+// An expired session anywhere sends the user back to the sign-in screen.
+if (typeof window !== 'undefined') {
+  window.addEventListener(UNAUTHORIZED_EVENT, () => {
+    const st = useStore.getState();
+    if (st.authEnabled && st.auth === 'ok') {
+      closeStream?.();
+      closeStream = null;
+      useStore.setState({ auth: 'signed-out', ready: false, user: null });
+    }
+  });
+}
 
 // Convenience selectors ---------------------------------------------------------------------
 export const useVehicle = (id: ID | undefined) => useStore((s) => s.vehicles.find((v) => v.id === id));

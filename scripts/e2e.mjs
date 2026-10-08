@@ -21,7 +21,15 @@ if (!existsSync('apps/web/dist/index.html')) {
 
 // Own process group so the whole tree (node + tsx loader) is stopped afterwards.
 const server = spawn(process.execPath, ['--import', 'tsx', 'apps/server/src/index.ts'], {
-  env: { ...process.env, PORT: String(PORT), TRACKLIV_DATA_DIR: dataDir, NODE_ENV: 'production', FLEETGO_CLIENT_ID: '' },
+  env: {
+    ...process.env,
+    PORT: String(PORT),
+    TRACKLIV_DATA_DIR: dataDir,
+    NODE_ENV: 'production',
+    FLEETGO_CLIENT_ID: '',
+    TRACKLIV_USERS: 'E2E Tester:e2e-pass-123',
+    TRACKLIV_SESSION_SECRET: 'ab'.repeat(32),
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
   detached: true,
 });
@@ -38,10 +46,11 @@ server.stdout.on('data', (d) => (serverLog += d));
 server.stderr.on('data', (d) => (serverLog += d));
 
 // Retry once: the server may close an idle keep-alive socket just as it is reused.
-const api = async (path, init) => {
+let cookie = '';
+const api = async (path, init = {}) => {
   for (let i = 0; ; i++) {
     try {
-      const r = await fetch(`${BASE}${path}`, init);
+      const r = await fetch(`${BASE}${path}`, { ...init, headers: { ...(init.headers ?? {}), cookie } });
       return await r.json();
     } catch (e) {
       if (i >= 2) throw e;
@@ -84,6 +93,13 @@ async function drag(page, from, to) {
 
 try {
   await waitForServer();
+  const anon = await fetch(`${BASE}/api/bootstrap`);
+  check('API refuses requests without a session', anon.status === 401);
+  const login = await fetch(`${BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'e2e tester', password: 'e2e-pass-123' }) });
+  cookie = (login.headers.get('set-cookie') ?? '').split(';')[0];
+  check('API login issues a session cookie', login.ok && cookie.startsWith('tl_session='));
+  const bad = await fetch(`${BASE}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'E2E Tester', password: 'nope' }) });
+  check('wrong password is rejected', bad.status === 401);
   const boot = await api('/api/bootstrap');
   const [y, m, d] = boot.today.split('-').map(Number);
   const tomorrow = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
@@ -98,9 +114,17 @@ try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(BASE);
+  page.on('console', (m) => {
+    if (m.type() === 'error' && /Content Security Policy|Refused to/i.test(m.text())) errors.push(`CSP: ${m.text()}`);
+  });
+  const resp = await page.goto(BASE);
+  check('security headers are sent', !!resp.headers()['content-security-policy'] && resp.headers()['x-frame-options'] === 'DENY');
+  await page.getByRole('button', { name: 'Sign in' }).waitFor({ timeout: 30000 });
+  await page.getByLabel('Name').fill('E2E Tester');
+  await page.getByLabel('Password').fill('e2e-pass-123');
+  await page.getByRole('button', { name: 'Sign in' }).click();
   await page.getByText('Today’s runs').waitFor({ timeout: 30000 });
-  check('app loads with the map overview', true);
+  check('sign-in screen logs in and loads the map overview', true);
 
   // --- Dispatch: plan tomorrow ---------------------------------------------------------------
   await page.keyboard.press('2');
@@ -224,7 +248,17 @@ try {
   await page.getByText('Run tracking').or(page.getByText('Today’s runs')).first().waitFor();
   check('command palette finds and selects a vehicle', await page.getByText('Telemetry').isVisible());
 
-  check('no uncaught page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+  const events = await api('/api/bootstrap');
+  check('audit log records the signed-in user', events.events.some((e) => (e.detail ?? '').includes('E2E Tester') || e.title.includes('E2E Tester')));
+
+  // Sign out → back to the sign-in screen
+  await page.keyboard.press('Escape');
+  await page.locator('button[title^="Signed in as"]').click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await page.getByRole('button', { name: 'Sign in' }).waitFor({ timeout: 5000 });
+  check('sign out returns to the sign-in screen', true);
+
+  check('no uncaught page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   if (!process.argv.includes('--keep')) await browser.close();
 } catch (e) {
   failures++;
