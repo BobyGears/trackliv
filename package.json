@@ -16,7 +16,9 @@
     "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/web",
     "screenshot": "node scripts/screenshot.mjs",
     "e2e": "npm run build && node scripts/e2e.mjs",
-    "hash-password": "tsx apps/server/src/hash-password.ts"
+    "hash-password": "tsx apps/server/src/hash-password.ts",
+    "test:fleetgo": "node --import tsx scripts/fleetgo-dashboard-test.mjs",
+    "fleetgo-check": "tsx apps/server/src/fleetgo-check.ts"
   },
   "engines": {
     "node": ">=20"

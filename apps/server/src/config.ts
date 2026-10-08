@@ -45,6 +45,22 @@ export const config = {
     username: env.FLEETGO_USERNAME ?? '',
     password: env.FLEETGO_PASSWORD ?? '',
     pollSeconds: num(env.FLEETGO_POLL_SECONDS, 30),
+    /**
+     * 'dashboard' = sign in to the FleetGO web dashboard with a normal user (headless browser),
+     * 'api' = official partner API (needs FLEETGO_CLIENT_ID/SECRET). Picked automatically.
+     */
+    mode: (env.FLEETGO_MODE ||
+      (env.FLEETGO_CLIENT_ID && env.FLEETGO_CLIENT_SECRET ? 'api' : env.FLEETGO_USERNAME && env.FLEETGO_PASSWORD ? 'dashboard' : 'off')) as
+      | 'api'
+      | 'dashboard'
+      | 'off',
+    dashboardUrl: (env.FLEETGO_DASHBOARD_URL ?? 'https://app.fleetgo.com').replace(/\/$/, ''),
+    /** Optional page to open after signing in, if the start page doesn't load the vehicles (e.g. /Map). */
+    dashboardPage: env.FLEETGO_DASHBOARD_PAGE ?? '',
+    /** Only use responses whose URL contains this text as vehicle source (empty = automatic). */
+    dashboardSource: env.FLEETGO_DASHBOARD_SOURCE ?? '',
+    /** Chromium binary; empty = the one installed by Playwright (Docker image). */
+    browserPath: env.FLEETGO_BROWSER ?? '',
     /** Add FleetGO vehicles that don't match a TrackLiv vehicle automatically. */
     autoImport: (env.FLEETGO_AUTO_IMPORT ?? 'true') !== 'false',
   },
@@ -60,4 +76,6 @@ export const config = {
 };
 
 export const fleetgoConfigured = () =>
-  !!(config.fleetgo.clientId && config.fleetgo.clientSecret && config.fleetgo.username && config.fleetgo.password);
+  config.fleetgo.mode === 'api'
+    ? !!(config.fleetgo.clientId && config.fleetgo.clientSecret && config.fleetgo.username && config.fleetgo.password)
+    : config.fleetgo.mode === 'dashboard' && !!(config.fleetgo.username && config.fleetgo.password);

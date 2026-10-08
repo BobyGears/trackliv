@@ -82,20 +82,37 @@ Also: a command palette (`⌘K`), dark "ops" mode, and live multi-user updates o
 
 ## FleetGO
 
-Copy `.env.example` to `.env` and fill in:
+TrackLiv signs in to the **FleetGO web dashboard** with a normal FleetGO user, in the same way you sign in on app.fleetgo.com. No API keys are needed. Put the login into `.env` (on the server: `/opt/trackliv/.env`):
 
 ```
-FLEETGO_CLIENT_ID=…
-FLEETGO_CLIENT_SECRET=…
-FLEETGO_USERNAME=…
+FLEETGO_USERNAME=dispo@example.de
 FLEETGO_PASSWORD=…
 ```
 
-FleetGO issues API keys on request (info@fleetgo.com). The server logs in with `POST /api/session/login`, then polls `GET /api/equipment/Getfleet` every `FLEETGO_POLL_SECONDS` (30 s by default). These are the endpoints the open-source RitAssist/FleetGO client and the Home Assistant `fleetgo` integration use. All paths are configurable in `.env` in case your account is on a newer API version. Field parsing is tolerant to naming variants. The integration is tested against sample payloads (`apps/server/src/fleetgo.test.ts`), but not yet against a live account, so check the first sync.
+How it works:
 
-- FleetGO vehicles are matched to TrackLiv vehicles by FleetGO id, or by licence plate (`MTK-DT 103` = `MTKDT103`).
-- Unknown vehicles are **imported automatically** (`FLEETGO_AUTO_IMPORT`). The import guesses vehicle type, seats, licence class and home HQ from make, model and position.
+- A headless Chromium on the server opens app.fleetgo.com and signs in on FleetGO's sign-in page (Keycloak, login.fleetgo.com).
+- It lets the dashboard load and finds the vehicle list among the data the dashboard requests. It recognises the list by its content (number plate, position, speed, ignition), not by fixed field names, so places, geofences and trip histories are not mistaken for vehicles.
+- Every `FLEETGO_POLL_SECONDS` (30 s) it repeats that request from inside the signed-in page, so FleetGO's own cookies and tokens are used.
+- When the session expires it signs in again. After a rejected password it waits 15 minutes, so the FleetGO user doesn't get locked.
+- Nothing secret is written to the log: no password, cookies or tokens.
+
+`./deploy.sh --fleetgo-check` signs in once and prints what TrackLiv sees: the requests the dashboard made (structure only, no values) and the vehicles it found. If the vehicles are not loaded on the dashboard's start page, set `FLEETGO_DASHBOARD_PAGE` to the page that shows them (for example `/Map`).
+
+Tips:
+
+- Use a separate FleetGO user for TrackLiv, without two-factor sign-in.
+- If the password contains a `$`, put it in single quotes: `FLEETGO_PASSWORD='pa$$word'`.
+
+**Matching:**
+
+- FleetGO vehicles are matched to TrackLiv vehicles by FleetGO id, or by licence plate (`MTK TE 800` = `MTK-TE 800`).
+- Unknown vehicles are **imported automatically** (`FLEETGO_AUTO_IMPORT`).
 - In live mode the simulator is off, and stages come from real GPS.
+
+**Official API (alternative):** if you have FleetGO partner API keys, set `FLEETGO_CLIENT_ID` and `FLEETGO_CLIENT_SECRET` as well, and TrackLiv uses `POST /api/session/login` and `GET /api/equipment/Getfleet` instead of the dashboard.
+
+**Tests:** `npm run test:fleetgo` runs the dashboard connection in a real headless Chromium against a stand-in FleetGO (`scripts/fleetgo-mock.mjs`). The stand-in is built like the real one: sign-in on a separate host, a generic query endpoint with session cookie and anti-forgery token, places mixed in with vehicles, and expiring sessions. `-- --real` additionally checks that the real sign-in page still has the expected fields, without signing in.
 
 ## Data
 
@@ -124,6 +141,7 @@ TrackLiv runs on our own server, next to Registra Atlas. It is one Docker contai
 ./deploy.sh --status     # container, health and the last log lines
 ./deploy.sh --logs       # follow the log
 ./deploy.sh --dry-run    # show what would be uploaded
+./deploy.sh --fleetgo-check   # sign in to FleetGO once and show what TrackLiv sees
 ```
 
 On the first run the script asks for the SSH login and port (the same as for Registra Atlas) and whether a login is required, and saves the answers in `deploy/server.env`. That file is git-ignored.
@@ -142,7 +160,7 @@ On the first run the script asks for the SSH login and port (the same as for Reg
 | `data/db.json` | master data, plans and the audit log |
 | `data/backups/` | a daily copy (kept 30 days) and one before every deploy (last 20) |
 
-To switch from the simulator to live vehicles, put the FleetGO credentials into `/opt/trackliv/.env` and run `./deploy.sh --no-build`.
+To switch from the simulator to live vehicles, put the FleetGO login (`FLEETGO_USERNAME`, `FLEETGO_PASSWORD`) into `/opt/trackliv/.env`, run `./deploy.sh --no-build`, then `./deploy.sh --fleetgo-check`.
 
 ### Logins
 

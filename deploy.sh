@@ -7,6 +7,7 @@
 #   ./deploy.sh --no-build  upload + restart with the image already on the server
 #   ./deploy.sh --status    container status, health and the last log lines
 #   ./deploy.sh --logs      follow the server log (Ctrl+C to stop)
+#   ./deploy.sh --fleetgo-check   sign in to FleetGO once and show what TrackLiv sees (no secrets shown)
 #
 # Runs next to Registra Atlas on the same server: TrackLiv is one container
 # (trackliv-app) in the docker network "atlas-edge"; the Caddy that already
@@ -85,8 +86,11 @@ case "$MODE" in
   --logs)
     "${SSH[@]}" -t "${SERVER}" "docker logs -f --tail 100 trackliv-app"
     exit 0 ;;
+  --fleetgo-check)
+    "${SSH[@]}" "${SERVER}" "docker exec trackliv-app node --import tsx apps/server/src/fleetgo-check.ts" || true
+    exit 0 ;;
   ""|--no-build) ;;
-  *) echo "Unknown option ${MODE} (use --dry-run, --no-build, --status or --logs)"; exit 1 ;;
+  *) echo "Unknown option ${MODE} (use --dry-run, --no-build, --status, --logs or --fleetgo-check)"; exit 1 ;;
 esac
 echo "▶ Deploying TrackLiv ${VERSION:-dev} to ${SERVER} → https://${DOMAIN}"
 
@@ -128,7 +132,9 @@ echo "── 3/6 Server settings (${DEST}/.env)"
     echo '   └──────────────────────────────────────────────────────────────'
     echo ''
   fi
-  if grep -Eq '^FLEETGO_CLIENT_ID=.+' .env; then echo '   FleetGO: credentials present – live vehicle data'; else echo '   FleetGO: no credentials yet – demo simulator (add them to .env, then ./deploy.sh --no-build)'; fi"
+  if grep -Eq '^FLEETGO_CLIENT_ID=.+' .env; then echo '   FleetGO: API keys present – live vehicle data via the FleetGO API'
+  elif grep -Eq '^FLEETGO_USERNAME=.+' .env && grep -Eq '^FLEETGO_PASSWORD=.+' .env; then echo '   FleetGO: login present – live vehicle data via the FleetGO dashboard (./deploy.sh --fleetgo-check to test)'
+  else echo '   FleetGO: no login yet – demo simulator (add FLEETGO_USERNAME/FLEETGO_PASSWORD to .env, then ./deploy.sh --no-build)'; fi"
 
 STEP="4/6 backup"
 echo "── 4/6 Backup of the current data"
