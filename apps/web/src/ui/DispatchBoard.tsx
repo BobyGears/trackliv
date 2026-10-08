@@ -5,6 +5,7 @@ import {
   pointerWithin,
   rectIntersection,
   type CollisionDetection,
+  useDndContext,
   useDraggable,
   useDroppable,
   useSensor,
@@ -121,7 +122,17 @@ export function DispatchBoard() {
       useStore.getState().toast({ kind: 'warning', title: `${fullName(p)} is ${p.status}` });
       return;
     }
-    commit((list) => assignPerson(list, ctx, pid, vid), `${fullName(p)} → ${v.callsign}`);
+    const fromVid = plan.assignments.find((x) => x.crew.includes(pid))?.vehicleId;
+    if (fromVid === vid) return;
+    const from = vehicles.find((x) => x.id === fromVid);
+    const ok = commit((list) => assignPerson(list, ctx, pid, vid), `${fullName(p)} → ${v.callsign}`);
+    if (ok)
+      useStore.getState().toast({
+        kind: 'success',
+        title: `${fullName(p)} → ${v.callsign}`,
+        detail: from ? `moved from ${from.callsign}` : undefined,
+        action: { label: 'Undo', run: () => useStore.getState().undo() },
+      });
   };
 
   return (
@@ -387,6 +398,9 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
   const commit = useStore((s) => s.commit);
   const select = useStore((s) => s.select);
   const { setNodeRef, isOver } = useDroppable({ id: `vehicle:${vehicle.id}`, disabled: readOnly || vehicle.status !== 'active' });
+  const { active } = useDndContext();
+  const draggedId = (active?.data.current as { personId?: string } | undefined)?.personId;
+  const dragged = draggedId ? people.find((p) => p.id === draggedId) : undefined;
   const [picker, setPicker] = useState(false);
   const destBtn = useRef<HTMLButtonElement>(null);
   const a = assignment;
@@ -399,6 +413,9 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
   const hasDriver = crew.some((p) => canDrive(p, vehicle));
   const destChanged = !!before && JSON.stringify(before.destination) !== JSON.stringify(a?.destination ?? null);
   const accent = project?.color ?? (a?.destination ? '#7c5cff' : 'var(--border-strong)');
+  const draggedHere = !!dragged && !!a?.crew.includes(dragged.id);
+  const full = !!dragged && !draggedHere && crew.length >= cap;
+  const canDrop = !!dragged && !readOnly && !inactive && !draggedHere;
 
   return (
     <div
@@ -406,17 +423,27 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
       data-testid={`vehicle-card-${vehicle.callsign}`}
       className={cx(
         'relative flex flex-col overflow-hidden rounded-xl border bg-panel-solid shadow-sm transition-all',
-        isOver ? 'border-primary ring-2 ring-primary/40' : 'border-line',
+        isOver && canDrop ? (full ? 'border-danger ring-2 ring-danger/40' : 'border-primary ring-2 ring-primary/40') : canDrop ? 'border-dashed border-primary/45' : 'border-line',
         inactive && 'opacity-60',
       )}
     >
+      {isOver && canDrop && (
+        <div
+          className={cx(
+            'pointer-events-none absolute inset-x-2 top-2 z-10 rounded-lg px-2.5 py-1.5 text-center text-[12px] font-semibold text-white shadow-lg',
+            full ? 'bg-danger' : 'bg-primary',
+          )}
+        >
+          {full ? `${vehicle.callsign} is full (${cap} seats)` : `Move ${dragged!.firstName} to ${vehicle.callsign}`}
+        </div>
+      )}
       <div className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
       <div className="flex items-center gap-2 py-2 pl-3.5 pr-2">
         <span className="grid size-7 place-items-center rounded-lg bg-panel-3 text-ink-2">{vehicle.kind === 'truck' ? <Truck size={14} /> : <Car size={14} />}</span>
         <button className="min-w-0 flex-1 text-left" onClick={() => select({ type: 'vehicle', id: vehicle.id })}>
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 whitespace-nowrap">
             <span className="mono text-[13px] font-bold">{vehicle.callsign}</span>
-            <span className="mono text-[10.5px] text-muted">{vehicle.plate}</span>
+            <span className="mono truncate text-[10.5px] text-muted">{vehicle.plate}</span>
           </span>
           <span className="block truncate text-[10.5px] text-muted">
             {vehicleDesc(vehicle)} · {vehicle.requiredLicense}
@@ -548,7 +575,13 @@ function SeatRow({ person, vehicle, locked, isNew, readOnly, driver }: { person:
         isDragging && 'opacity-40',
       )}
     >
-      <span {...listeners} {...attributes} className={cx('flex min-w-0 flex-1 items-center gap-2', !readOnly && 'cursor-grab active:cursor-grabbing')}>
+      <span
+        {...listeners}
+        {...attributes}
+        title={readOnly ? undefined : `Drag ${person.firstName} to another vehicle`}
+        className={cx('flex min-w-0 flex-1 items-center gap-2', !readOnly && 'cursor-grab active:cursor-grabbing')}
+      >
+        {!readOnly && <GripVertical size={13} className="-ml-1 -mr-1 shrink-0 text-subtle opacity-0 group-hover:opacity-100" />}
         <Avatar person={person} size={24} ring={locked ? 'var(--violet)' : undefined} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[12px] font-semibold leading-tight">
