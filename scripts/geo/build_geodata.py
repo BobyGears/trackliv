@@ -6,10 +6,12 @@ files TrackLiv serves from data/geo/:
   region-*.geojson   offline Rhein-Main basemap (water, urban/forest, roads, rail, towns)
   hq-*.geojson       full-detail surroundings of both HQs (buildings with heights, streets, yards …)
   sites.json         HQ definitions: address point, building footprint, yard slots, gate
-  road-graph.json    routable road graph (largest connected component) for the simulator/ETAs
+  road-graph.json.gz routable road graph (largest connected component) for the simulator/ETAs:
+                     Rhein-Main in full detail + motorways/trunk/primary roads of all of Germany
 
   python3 scripts/geo/build_geodata.py
 """
+import gzip
 import json
 import math
 import os
@@ -109,8 +111,14 @@ def rnd(geom, nd):
 def write(name, data):
     os.makedirs(OUT, exist_ok=True)
     path = os.path.join(OUT, name)
-    with open(path, 'w') as f:
-        json.dump(data, f, separators=(',', ':'), ensure_ascii=False)
+    text = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
+    if name.endswith('.gz'):
+        # mtime=0: the same data gives the same file (no git churn)
+        with open(path, 'wb') as raw, gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0, compresslevel=9) as f:
+            f.write(text.encode('utf-8'))
+    else:
+        with open(path, 'w') as f:
+            f.write(text)
     print(f'{name}: {os.path.getsize(path) / 1024:.0f} KB', file=sys.stderr)
 
 
@@ -490,6 +498,10 @@ def build_graph():
 
     add_segments(load('region_roads'), lambda f: True)
     add_segments(load('hq_segment'), lambda f: True)
+    # Germany-wide motorways, trunk and primary roads: routes and ETAs to projects outside Rhein-Main.
+    # Overture connector ids are global, so these join the regional network at the shared junctions.
+    if os.path.exists(os.path.join(CACHE, 'de_roads.geojson')):
+        add_segments(load('de_roads'), lambda f: True)
 
     # de-duplicate edges that came from both downloads
     uniq = {}
@@ -529,7 +541,7 @@ def build_graph():
                 e.append(interior)
             out_edges.append(e)
     print(f'graph: {len(keep_nodes)} nodes / {len(out_edges)} edges (of {len(node_xy)} nodes)', file=sys.stderr)
-    write('road-graph.json', {'classes': classes, 'nodes': nodes, 'edges': out_edges})
+    write('road-graph.json.gz', {'classes': classes, 'nodes': nodes, 'edges': out_edges})
 
 
 if __name__ == '__main__':

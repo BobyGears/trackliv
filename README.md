@@ -124,7 +124,7 @@ Tips:
 - **Geodata** (`data/geo/`) is generated from [Overture Maps](https://overturemaps.org) (release 2026-09-23):
   - `hq-*.geojson`: every building with height, streets, rail, yards and water within about 1 km of both HQs.
   - `region-*.geojson`: an offline Rhein-Main basemap (towns, motorways, primary and secondary roads, rail, rivers, forest and urban areas). No tile server or API key is needed.
-  - `road-graph.json`: a routable road graph (~69k nodes) for ETAs, planned routes and the simulator.
+  - `road-graph.json.gz`: a routable road graph for ETAs, planned routes and the simulator – every street in Rhein-Main plus the motorways, federal and main roads of all of Germany (~600k junctions, so projects in Ludwigshafen, Munich or Hamburg get real routes and driving times).
   - `sites.json`: HQ address points, building footprints, yard bays and gates. You can hand-edit yard bays here.
 
   The address points come from the official Hessen address register, through Overture and OpenAddresses. Regenerate with:

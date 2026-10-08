@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { RoadGraph, type LngLat, type Route, type RoadGraphData, type Site } from '@trackliv/core';
 import { config } from './config.ts';
 
@@ -26,7 +27,10 @@ let graph: RoadGraph | null = null;
 export function roadGraph(): RoadGraph {
   if (!graph) {
     const t0 = Date.now();
-    const data = JSON.parse(readFileSync(join(config.geoDir, 'road-graph.json'), 'utf8')) as RoadGraphData;
+    // Germany-wide graph is stored gzipped (~9 MB instead of ~37 MB)
+    const gz = join(config.geoDir, 'road-graph.json.gz');
+    const text = existsSync(gz) ? gunzipSync(readFileSync(gz)).toString('utf8') : readFileSync(join(config.geoDir, 'road-graph.json'), 'utf8');
+    const data = JSON.parse(text) as RoadGraphData;
     graph = new RoadGraph(data);
     console.log(`[geo] road graph: ${graph.nodeCount} nodes (${Date.now() - t0} ms)`);
   }

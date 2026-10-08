@@ -25,6 +25,8 @@ from shapely import wkb
 from shapely.geometry import mapping
 
 RELEASE = os.environ.get('OVERTURE_RELEASE', '2026-09-23.1')
+# same data, used for single files S3 refuses to serve from RELEASE
+FALLBACK_RELEASES = ['2026-09-23.0']
 ROOT = f'overturemaps-us-west-2/release/{RELEASE}'
 CACHE = os.path.join(os.path.dirname(__file__), '.cache')
 
@@ -88,26 +90,48 @@ def row_groups_hitting(path, bbox):
     return path, hits
 
 
-def query(theme, typ, bbox, columns=None, where=None):
-    """where: optional (column, allowed values) – applied while reading, so large areas fit in memory."""
+def read_chunk(path, chunk, columns):
+    """Read row groups; if S3 keeps failing for this release's file, use the same file of an earlier release."""
+    alternatives = [path] + [path.replace(f'/release/{RELEASE}/', f'/release/{r}/') for r in FALLBACK_RELEASES]
+    last = None
+    for alt in alternatives:
+        for attempt in range(4):
+            try:
+                with S3.open_input_file(alt) as f:
+                    return pq.ParquetFile(f).read_row_groups(chunk, columns=columns)
+            except OSError as e:
+                last = e
+                time.sleep(2 * (attempt + 1))
+        print(f'  ! {alt.rsplit("/", 1)[-1]} not readable, trying an earlier release', file=sys.stderr)
+    raise last
+
+
+def query(theme, typ, bbox, columns=None, where=None, parts=None):
+    """where: optional (column, allowed values) – applied while reading, so large areas fit in memory.
+    parts: directory to keep each finished chunk in, so an interrupted download resumes."""
     xmin, ymin, xmax, ymax = bbox
     with cf.ThreadPoolExecutor(8) as ex:
         res = list(ex.map(lambda p: row_groups_hitting(p, bbox), files(theme, typ)))
     tables = []
     todo = [(path, hits[i:i + 4]) for path, hits in res for i in range(0, len(hits), 4)]
     for n, (path, chunk) in enumerate(todo):
-
-        def read():
-            with S3.open_input_file(path) as f:
-                return pq.ParquetFile(f).read_row_groups(chunk, columns=columns)
-
-        t = retry(read)
+        part = os.path.join(parts, f"{path.rsplit('/', 1)[-1]}-{chunk[0]}.parquet") if parts else None
+        if part and os.path.exists(part):
+            t = pq.read_table(part)
+            if t.num_rows:
+                tables.append(t)
+            continue
+        t = read_chunk(path, chunk, columns)
         bb = t.column('bbox').to_pylist()
         mask = [b['xmin'] <= xmax and b['xmax'] >= xmin and b['ymin'] <= ymax and b['ymax'] >= ymin for b in bb]
         if where:
             col, allowed = where
             mask = [m and v in allowed for m, v in zip(mask, t.column(col).to_pylist())]
         t = t.filter(pa.array(mask))
+        if part:
+            os.makedirs(parts, exist_ok=True)
+            pq.write_table(t, part + '.tmp')
+            os.replace(part + '.tmp', part)
         if t.num_rows:
             tables.append(t)
         if len(todo) > 20 and n % 10 == 0:
@@ -115,11 +139,12 @@ def query(theme, typ, bbox, columns=None, where=None):
     return pa.concat_tables(tables, promote_options='default') if tables else None
 
 
-def dump(name, theme, typ, bboxes, columns=None, keep=lambda r: True, where=None):
+def dump(name, theme, typ, bboxes, columns=None, keep=lambda r: True, where=None, resumable=False):
     """bboxes: one bbox or a list of them (features in several are kept once)."""
     rows, seen = [], set()
     for bbox in (bboxes if isinstance(bboxes, list) else [bboxes]):
-        t = query(theme, typ, bbox, columns=(columns + ['geometry', 'bbox']) if columns else None, where=where)
+        t = query(theme, typ, bbox, columns=(columns + ['geometry', 'bbox']) if columns else None, where=where,
+                  parts=os.path.join(CACHE, f'{name}.parts') if resumable else None)
         for r in (t.to_pylist() if t is not None else []):
             if r.get('id') in seen:
                 continue
@@ -158,7 +183,7 @@ JOBS = {
                                  ['id', 'names', 'subtype', 'class', 'connectors', 'road_flags'],
                                  lambda r: r['class'] in REGION_ROAD_CLASSES),
     'de_roads': lambda: dump('de_roads', 'transportation', 'segment', DE_BBOX,
-                             ['id', 'subtype', 'class', 'connectors'], where=('class', DE_ROAD_CLASSES)),
+                             ['id', 'subtype', 'class', 'connectors'], where=('class', DE_ROAD_CLASSES), resumable=True),
     'region_water': lambda: dump('region_water', 'base', 'water', REGION_BBOX,
                                  ['id', 'names', 'subtype', 'class'],
                                  lambda r: r['subtype'] in ('river', 'lake', 'reservoir', 'canal', 'water', 'pond')),
