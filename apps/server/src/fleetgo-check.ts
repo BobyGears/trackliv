@@ -34,14 +34,25 @@ try {
   console.log('');
   console.log(`Requests with data the dashboard made (best vehicle candidates first):`);
   for (const o of st.observed.slice(0, 25)) {
-    const tag = o.vehicles ? `${o.vehicles} vehicle(s), score ${o.score}` : '–';
+    const tag = o.vehicles && o.score ? `${o.vehicles} vehicle(s), score ${o.score}` : '–';
     console.log(`  ${String(o.status).padEnd(4)}${o.method.padEnd(5)}${o.url}`);
-    console.log(`        ${tag} · ${o.shape}`);
+    console.log(`        ${tag} · ${o.status === 200 && o.detail.length > 2 ? o.detail : o.shape}`);
   }
   if (!st.observed.length) console.log('  (none – the dashboard did not request any data)');
+  if (st.tried.length) {
+    console.log('');
+    console.log('Menu entries opened while looking for the vehicle positions:');
+    for (const t of st.tried) console.log(`  ${t.found > 0 ? `✔ ${t.found} vehicles` : t.found < 0 ? '✗ could not open' : '– nothing'}  ${t.entry}`);
+  }
+  if (st.menu.length && !st.vehicles.length) {
+    console.log('');
+    console.log('FleetGO menu (pages TrackLiv can open):');
+    for (const m of st.menu.slice(0, 40)) console.log(`  ${(m.text || '(no text)').padEnd(34)} ${m.path || '(click)'}`);
+  }
   console.log('');
   if (st.vehicles.length) {
     console.log(`  ✔ ${st.vehicles.length} vehicles from ${st.source}`);
+    if (st.vehiclePage) console.log(`    on the page ${st.vehiclePage} (remembered for next time)`);
     for (const v of st.vehicles.slice(0, 10)) {
       const pos = v.lat !== null && v.lng !== null ? `${v.lat.toFixed(4)}, ${v.lng.toFixed(4)}` : 'no position';
       console.log(`     ${v.plate.padEnd(16)} ${pos.padEnd(20)} ${v.ts ?? ''} ${v.speedKmh ? `${Math.round(v.speedKmh)} km/h` : ''}`);
@@ -51,7 +62,7 @@ try {
     code = 2;
     console.log(`  ✗ Signed in, but no vehicle list found yet (page: ${st.page}).`);
     console.log(`    Send this output to the developer – it contains no passwords or tokens.`);
-    console.log(`    If the vehicles are on another page, set FLEETGO_DASHBOARD_PAGE (e.g. /Map) in .env and run the check again.`);
+    console.log(`    If you know the page with the live map, set FLEETGO_DASHBOARD_PAGE (a path from the menu above) in .env and run the check again.`);
   }
 } catch (err) {
   code = 1;

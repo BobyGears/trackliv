@@ -204,6 +204,8 @@ export function scoreList(items: unknown[]): number {
   // vehicles have a plate or name each (an id alone counts less); trip points and tracks have neither
   const labelled = (named + 0.4 * idOnly) / n;
   const distinct = named + idOnly ? labels.size / (named + idOnly) : 0;
+  // a fleet lists each vehicle once; trips, stops and messages repeat the same few vehicles
+  if (n >= 4 && named + idOnly >= 4 && distinct < 0.5) return 0;
   return (
     coords *
     (0.2 + labelled) *

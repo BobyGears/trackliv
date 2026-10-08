@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Browser, BrowserContext, Page, Request, Response } from 'playwright-core';
 import { config } from './config.ts';
 import type { FleetGoEquipment } from './fleetgo.ts';
@@ -13,6 +15,10 @@ import { extractVehicles, maskUser, redactUrl, shapeOf } from './fleetgoExtract.
  * from the data the dashboard itself requests. The request that delivered them is then repeated every
  * poll from inside the signed-in page, so cookies, tokens and anti-forgery headers stay FleetGO's own.
  *
+ * FleetGO opens on each user's own start page (e.g. "Fahrten Übersicht"), which may not load any vehicle
+ * positions. Then the connector looks through the dashboard's own menu, opens the entries that look like
+ * a live map or vehicle list one by one, and remembers the page that delivered the vehicles.
+ *
  * Nothing secret is logged: no password, cookies, tokens or headers; URLs without token-like values.
  */
 
@@ -24,6 +30,73 @@ const OTP_SEL = '#otp, input[name="otp"], input[autocomplete="one-time-code"]';
 /** Requests the dashboard doesn't need to deliver data – skipped to save memory and bandwidth. */
 const BLOCKED_TYPES = new Set(['image', 'media', 'font']);
 const BLOCKED_HOSTS = /(google-analytics|googletagmanager|doubleclick|hotjar|clarity\.ms|facebook|segment\.io|intercom)/i;
+/** Menu entries worth opening when looking for the live positions, and entries never to open. */
+const MENU_GOOD: [RegExp, number][] = [
+  [/live|echtzeit|real.?time/i, 5],
+  [/karte|map|kaart|carte/i, 4],
+  [/fahrzeug|vehicle|voertuig|equipment|objekt|object|asset|flotte|fleet|unit|wagen/i, 3],
+  [/position|standort|locat|track|ortung|gps/i, 3],
+  [/dashboard|home|start|übersicht|overview|overzicht/i, 1],
+];
+const MENU_NEVER = /log.?out|log.?off|sign.?out|abmeld|afmeld|uitlog|delete|löschen|verwijder|remove|entfern|password|passwort|wachtwoord|invoice|rechnung|factu|billing|abo|subscription|privacy|datenschutz|download|export|print|druck|mailto:|tel:|javascript:/i;
+const MENU_LATER = /trip|fahrt|rit|report|bericht|rapport|auswert|analys|setting|einstellung|instelling|config|user|benutzer|gebruiker|help|hilfe|support|geofence|poi|zone|admin|kosten|cost|fuel|tank|notification|benachrichtig|alarm|melding|account|konto|profil|planning|wartung|onderhoud|maintenance/i;
+
+export interface MenuEntry {
+  /** path on the dashboard host, or '' when the entry is only clickable */
+  path: string;
+  text: string;
+}
+
+/** Runs in the dashboard page: the app's own menu entries (links and clickable items). */
+const READ_MENU = `(() => {
+  const out = [], seen = new Set();
+  const label = (el) => (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 60);
+  const add = (raw, el) => {
+    const text = label(el);
+    let path = '';
+    if (raw) {
+      try {
+        const u = new URL(raw, location.href);
+        if (u.host !== location.host || !/^https?:$/.test(u.protocol)) return;
+        path = u.pathname + (u.hash.startsWith('#/') || u.hash.startsWith('#!') ? u.hash : '') + u.search;
+      } catch { return; }
+    }
+    if (!path && !text) return;
+    const key = path || 'text:' + text;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ path, text });
+  };
+  for (const a of document.querySelectorAll('a[href]')) {
+    const h = a.getAttribute('href') || '';
+    if (h && h !== '#' && !/^javascript:/i.test(h)) add(a.href, a);
+  }
+  for (const el of document.querySelectorAll('[data-url], [data-href], [data-link], [routerlink], [ng-reflect-router-link]')) {
+    add(el.getAttribute('data-url') || el.getAttribute('data-href') || el.getAttribute('data-link') || el.getAttribute('routerlink') || el.getAttribute('ng-reflect-router-link'), el);
+  }
+  for (const el of document.querySelectorAll('nav li, aside li, [role="menuitem"], [role="tab"], .menu li, .sidebar li, .nav li, .navbar li')) {
+    if (el.matches('[data-url], [data-href], [data-link], [routerlink]') || el.closest('a[href]')) continue;
+    if (el.querySelector('a[href]:not([href="#"]), [data-url], [data-href], [data-link], [routerlink]')) continue;
+    const t = label(el);
+    if (t && t.length <= 40 && !out.some((o) => o.text === t)) add('', el);
+  }
+  return out.slice(0, 120);
+})()`;
+
+/** Highest first; entries that are never opened are left out. */
+export function rankMenu(entries: MenuEntry[], current: string): (MenuEntry & { score: number })[] {
+  return entries
+    .filter((e) => !MENU_NEVER.test(`${e.path} ${e.text}`) && e.path !== current)
+    .map((e) => {
+      const hay = `${e.path} ${e.text}`;
+      let score = MENU_GOOD.reduce((n, [re, w]) => n + (re.test(hay) ? w : 0), 0);
+      if (MENU_LATER.test(hay)) score -= 6;
+      return { ...e, score };
+    })
+    .filter((e) => e.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
 /** Headers a replayed request must not copy (the browser sets them, or they are per-connection). */
 const DROP_HEADERS = /^(cookie|host|content-length|origin|referer|user-agent|accept-encoding|connection|sec-|:)/i;
 
@@ -41,6 +114,8 @@ export interface ObservedRequest {
   url: string;
   status: number;
   shape: string;
+  /** the same, three levels deeper (field names only, never values) */
+  detail: string;
   vehicles: number;
   score: number;
   at: number;
@@ -71,11 +146,23 @@ export class FleetGoDashboard {
   private recipe: Recipe | null = null;
   lastData = 0;
   readonly observed = new Map<string, ObservedRequest>();
+  /** The dashboard page that delivered the vehicles (found by looking through the menu). */
+  private vehiclePage = '';
+  private menu: MenuEntry[] = [];
+  private tried: { entry: string; found: number }[] = [];
 
   constructor(
     private cfg: Cfg = config.fleetgo,
     private log: (msg: string) => void = (m) => console.log(`[fleetgo] ${m}`),
-  ) {}
+    /** remembers the vehicle page across restarts; null = don't */
+    private memoryFile: string | null = join(config.dataDir, 'fleetgo-page.json'),
+  ) {
+    try {
+      if (memoryFile && existsSync(memoryFile)) this.vehiclePage = String((JSON.parse(readFileSync(memoryFile, 'utf8')) as { page?: string }).page ?? '');
+    } catch {
+      /* start without */
+    }
+  }
 
   private get appHost() {
     return new URL(this.cfg.dashboardUrl).host;
@@ -203,13 +290,76 @@ export class FleetGoDashboard {
     }
 
     await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
-    if (this.cfg.dashboardPage) {
-      await page.goto(new URL(this.cfg.dashboardPage, this.cfg.dashboardUrl).href, { waitUntil: 'domcontentloaded' });
+    const target = this.cfg.dashboardPage || this.vehiclePage;
+    if (target) {
+      await page.goto(new URL(target, this.cfg.dashboardUrl).href, { waitUntil: 'domcontentloaded' });
       await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
     }
     this.signedIn = true;
     this.lastReload = Date.now();
     this.log(`signed in (${redactUrl(page.url())})`);
+    if (!this.cfg.dashboardPage) await this.findVehiclePage();
+  }
+
+  private async vehiclesWithin(ms: number) {
+    const until = Date.now() + ms;
+    while (!this.source && Date.now() < until) await new Promise((r) => setTimeout(r, 400));
+    return !!this.source;
+  }
+
+  private pagePath() {
+    const u = new URL(this.page!.url());
+    return u.pathname + (u.hash.startsWith('#/') || u.hash.startsWith('#!') ? u.hash : '') + u.search;
+  }
+
+  /**
+   * No vehicle positions on this page? Open the menu entries that look like a live map or vehicle list
+   * until one delivers them, and remember that page.
+   */
+  private async findVehiclePage() {
+    const page = this.page!;
+    if (await this.vehiclesWithin(12_000)) return this.remember(this.pagePath());
+    const start = page.url();
+    this.menu = ((await page.evaluate(READ_MENU).catch(() => [])) as MenuEntry[]) ?? [];
+    const candidates = rankMenu(this.menu, this.pagePath()).slice(0, 8);
+    this.log(`no vehicle positions on ${redactUrl(start)} – ${candidates.length} menu entr${candidates.length === 1 ? 'y' : 'ies'} to try`);
+    const deadline = Date.now() + 4 * 60_000;
+    for (const c of candidates) {
+      if (Date.now() > deadline || !this.page || this.page.isClosed()) break;
+      const name = c.text ? `"${c.text}"${c.path ? ` (${c.path})` : ''}` : c.path;
+      try {
+        if (c.path) await page.goto(new URL(c.path, this.cfg.dashboardUrl).href, { waitUntil: 'domcontentloaded' });
+        else await page.getByText(c.text, { exact: true }).first().click({ timeout: 8_000 });
+        await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+        if (await this.onLoginForm()) {
+          this.signedIn = false;
+          this.tried.push({ entry: name, found: -1 });
+          break; // signed out – the next poll signs in again
+        }
+        const found = await this.vehiclesWithin(10_000);
+        this.tried.push({ entry: name, found: found ? this.vehicles.size : 0 });
+        if (found) {
+          this.log(`vehicle positions are on ${name}`);
+          return this.remember(this.pagePath());
+        }
+      } catch {
+        this.tried.push({ entry: name, found: -1 });
+      }
+    }
+    if (!this.source && this.page && !this.page.isClosed() && this.page.url() !== start) {
+      await page.goto(start, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    }
+  }
+
+  private remember(path: string) {
+    if (!path || path === this.vehiclePage) return;
+    this.vehiclePage = path;
+    if (!this.memoryFile) return;
+    try {
+      writeFileSync(this.memoryFile, JSON.stringify({ page: path, found: new Date().toISOString() }));
+    } catch {
+      /* read-only data dir – find it again next time */
+    }
   }
 
   /** Get fresh data: repeat the request that delivered the vehicles, or reload the dashboard. */
@@ -229,8 +379,9 @@ export class FleetGoDashboard {
       }
       return;
     }
-    if (Date.now() - this.lastReload > 30 * 60_000) {
-      // reload the dashboard every 30 min so it renews its own tokens
+    // reload the dashboard now and then so it renews its own tokens – often when the request carries a
+    // short-lived bearer token (FleetGO's api.fleetgo.com), otherwise every 30 min
+    if (Date.now() - this.lastReload > (this.recipe.headers.authorization ? 4 : 30) * 60_000) {
       this.lastReload = Date.now();
       await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
       await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
@@ -281,9 +432,9 @@ export class FleetGoDashboard {
     }
   }
 
-  private note(method: string, url: string, status: number, shape: string, vehicles: number, score: number) {
+  private note(method: string, url: string, status: number, shape: string, vehicles: number, score: number, detail = shape) {
     const key = `${method} ${url}`;
-    this.observed.set(key, { method, url, status, shape, vehicles, score, at: Date.now() });
+    this.observed.set(key, { method, url, status, shape, detail, vehicles, score, at: Date.now() });
     if (this.observed.size > 80) this.observed.delete(this.observed.keys().next().value!);
   }
 
@@ -291,14 +442,15 @@ export class FleetGoDashboard {
   private ingest(json: unknown, key: string, method: string, status: number): boolean {
     const found = extractVehicles(json);
     const path = key.replace(/^\S+\s/, '');
-    const hint = /(vehicle|equipment|fleet|asset|object|position|location|tracking|map|unit|query)/i.test(path)
-      ? 1.5
-      : /(poi|place|geofence|zone|address|trip|history|route)/i.test(path)
-        ? 0.2
+    // the request's own name says what it is: trips and history lists are never the live fleet
+    const hint = /(poi|place|geofence|zone|address|trip|history|route|report|journey|ride|fahrt)/i.test(path)
+      ? 0
+      : /(vehicle|equipment|fleet|asset|object|position|location|tracking|map|unit|query)/i.test(path)
+        ? 1.5
         : 1;
     const score = found ? found.candidate.score * hint : 0;
-    this.note(method, path, status, shapeOf(json).slice(0, 240), found?.vehicles.length ?? 0, Math.round(score * 10) / 10);
-    if (!found) return false;
+    this.note(method, path, status, shapeOf(json).slice(0, 240), found?.vehicles.length ?? 0, Math.round(score * 10) / 10, shapeOf(json, -3).slice(0, 1200));
+    if (!found || !score) return false;
     if (this.cfg.dashboardSource && !key.includes(this.cfg.dashboardSource)) return false;
     const isSource = this.source?.key === key;
     const single = found.candidate.items.length === 1 && found.candidate.path === '';
@@ -326,6 +478,9 @@ export class FleetGoDashboard {
       source: this.source?.key ?? null,
       vehicles: [...this.vehicles.values()],
       lastData: this.lastData,
+      vehiclePage: this.vehiclePage,
+      menu: this.menu,
+      tried: this.tried,
       observed: [...this.observed.values()].sort((a, b) => b.score - a.score || b.at - a.at),
     };
   }

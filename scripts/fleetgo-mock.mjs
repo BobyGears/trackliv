@@ -1,6 +1,8 @@
 // A stand-in for FleetGO, built like the real one: dashboard on one host, Keycloak sign-in on
 // another (form_post back to /kcoidc/signin-oidc), a generic POST "query" endpoint guarded by a
 // session cookie and an anti-forgery header, places mixed in with vehicles, expiring sessions.
+// Like a real account it opens on the trips page ("Fahrten Übersicht"); the vehicle positions are
+// only loaded on another page of the menu, which is reached by a click (no link).
 import { randomBytes } from 'node:crypto';
 import express from 'express';
 
@@ -9,7 +11,7 @@ export async function startFleetGoMock({ username = 'dispo@example.de', password
   const codes = new Set();
   const antiForgery = randomBytes(8).toString('hex');
   let tick = 0;
-  const stats = { logins: 0, failedLogins: 0, vehicleQueries: 0 };
+  const stats = { logins: 0, failedLogins: 0, vehicleQueries: 0, logouts: 0, tripQueries: 0 };
 
   const app = express();
   const login = express();
@@ -23,16 +25,37 @@ export async function startFleetGoMock({ username = 'dispo@example.de', password
   const authed = (req) => sessions.has(sid(req));
 
   // ---- dashboard (app.fleetgo.com) ----
-  app.get('/', (req, res) => {
-    if (!authed(req)) return res.redirect('/LogOn');
-    res.type('html').send(`<!doctype html><title>FleetGO</title><div id="map">Map</div>
+  const menu = `<nav><ul>
+  <li><a href="/Trip_Index/View/Trip_Index">Fahrten Übersicht</a></li>
+  <li><a href="/Report_Index/View/Report_Index">Berichte</a></li>
+  <li data-url="/Map_Index/View/Map_Index" onclick="location.href=this.dataset.url">Live-Karte</li>
+  <li onclick="location.href='/Fleet_Index/View/Fleet_Index'">Fahrzeuge</li>
+  <li><a href="/Account/LogOff">Abmelden</a></li>
+</ul></nav>`;
+  const view = (title, script) => `<!doctype html><title>FleetGO® - ${title}</title>${menu}<div id="main">${title}</div>
 <script>
   const token = '${antiForgery}';
-  const post = (body) => fetch('/api/query', { method: 'POST', headers: { 'content-type': 'application/json', 'x-requestverificationtoken': token }, body: JSON.stringify(body) });
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-requestverificationtoken': token }, body: JSON.stringify(body) });
   fetch('/api/UserViewSettings_Get');
   fetch('/api/notification');
-  post({ kind: 'places' }).then(() => post({ kind: 'vehicles', groupId: 0 }));
-</script>`);
+  ${script}
+</script>`;
+  const authedPage = (handler) => (req, res) => (authed(req) ? res.type('html').send(handler()) : res.redirect('/LogOn'));
+  app.get('/', (req, res) => (authed(req) ? res.redirect('/Trip_Index/View/Trip_Index') : res.redirect('/LogOn')));
+  app.get('/Trip_Index/View/Trip_Index', authedPage(() => view('Fahrten Übersicht', `post('/api/trips/view/query', { page: 1 });`)));
+  app.get('/Report_Index/View/Report_Index', authedPage(() => view('Berichte', '')));
+  app.get('/Map_Index/View/Map_Index', authedPage(() => view('Karte', `post('/api/query', { kind: 'places' });`)));
+  app.get('/Fleet_Index/View/Fleet_Index', authedPage(() => view('Fahrzeuge', `post('/api/query', { kind: 'places' }).then(() => post('/api/query', { kind: 'vehicles', groupId: 0 }));`)));
+  app.get('/Account/LogOff', (req, res) => {
+    stats.logouts++;
+    sessions.delete(sid(req));
+    res.redirect('/LogOn');
+  });
+  app.post('/api/trips/view/query', (req, res) => {
+    if (!authed(req)) return res.status(401).json({});
+    stats.tripQueries++;
+    const trip = (i) => ({ id: i, start: { address: 'Hafenstraße 18, Flörsheim', latitude: 50.0, longitude: 8.43, date: '2026-10-08T06:45:00' }, end: { address: 'Hanauer Landstraße 1, Frankfurt', latitude: 50.11, longitude: 8.7, date: '2026-10-08T07:09:00' }, distance: 32.4, duration: 1440, equipment: { id: 101, name: 'MTK-DT 101' } });
+    res.json({ rootGroup: { groups: [0, 1].map((g) => ({ items: [1, 2, 3].map((i) => trip(g * 10 + i)), summary: { totalDuration: 4320, totalDistance: 97.2, totalItemsCount: 3 }, groupedPropertyName: 'Equipment', groupValue: g })) }, totalItemsCount: 6 });
   });
   app.get('/LogOn', (_req, res) =>
     res.redirect(`${loginUrl}/realms/FleetGO/protocol/openid-connect/auth?client_id=fleetgo-hattem&redirect_uri=${encodeURIComponent(`${appUrl}/kcoidc/signin-oidc`)}&response_mode=form_post&state=st`),
