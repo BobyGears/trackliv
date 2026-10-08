@@ -250,6 +250,18 @@ try {
   await page.getByText('Run tracking').or(page.getByText('Today’s runs')).first().waitFor();
   check('command palette finds and selects a vehicle', await page.getByText('Telemetry').isVisible());
 
+  // Vehicle history: every vehicle's day is recorded from the positions TrackLiv receives
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await page.getByText('Timeline', { exact: true }).or(page.getByText('Nothing recorded on this day')).first().waitFor({ timeout: 8000 });
+  const days = await Promise.all(boot.vehicles.map((v) => api(`/api/history/${v.id}`)));
+  const driven = days.filter((d) => d.trips.length);
+  check(
+    'vehicle history shows the day with stops and trips',
+    days.every((d) => d.points.length > 0) && driven.length > 0 && driven.every((d) => d.stops.length >= 2 && d.totals.distanceM > 0),
+    `${driven.length} vehicles drove today`,
+  );
+  await page.getByRole('button', { name: 'Live', exact: true }).click();
+
   const events = await api('/api/bootstrap');
   check('audit log records the signed-in user', events.events.some((e) => (e.detail ?? '').includes('E2E Tester') || e.title.includes('E2E Tester')));
 

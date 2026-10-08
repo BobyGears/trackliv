@@ -5,3 +5,4 @@ export * from './assignments.ts';
 export * from './randomize.ts';
 export * from './tracking.ts';
 export * from './routing.ts';
+export * from './history.ts';

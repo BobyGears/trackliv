@@ -69,6 +69,13 @@ Changes go live on every open screen. To start without the demo data, run `TRACK
 
 It raises alerts when a crewed vehicle hasn't left 15 minutes after its planned time, or leaves without an assignment.
 
+**Vehicle history** (*History* tab of a vehicle, like FleetGO's trip list): where the vehicle was on any day of the last 120 days.
+- The day's **stops** (3 minutes or longer), named after the HQ or project they were at, otherwise the address FleetGO reported, with arrival, departure and duration.
+- The **trips** between them, with times, kilometres and top speed, and totals for the day.
+- The track is drawn on the map with numbered stops and driving-direction arrows. Hover a trip to highlight it, click it or a stop to zoom there.
+
+TrackLiv records this itself from every position it receives (FleetGO every 30 s, or the simulator), thinned out to what the route needs, in `data/history/<day>.json.gz`.
+
 Also: German and English (one-click **DE/EN** switch in the top bar; German is the default for German browsers), a command palette (`⌘K`), dark "ops" mode, and live multi-user updates over SSE (several dispatchers can work at once, with optimistic updates and conflict retry). The map shows all of Germany with street names (vector tiles from [OpenFreeMap](https://openfreemap.org), no API key; any OpenMapTiles-schema source can be set with `VITE_BASEMAP_URL`). Without internet it falls back to the built-in offline Rhein-Main map.
 
 | Key | Action |
@@ -117,6 +124,7 @@ Tips:
 ## Data
 
 - **Master data, plans and the audit log** live in `apps/server/var/db.json` (on the server: `/opt/trackliv/data/db.json`).
+- **Vehicle history** lives in `data/history/YYYY-MM-DD.json.gz` (one file per day, kept for 120 days).
 - On first start, `TRACKLIV_SEED=demo` fills it with starting data:
   - DTE's 13 vehicles and 8 drivers, as listed in FleetGO. The plates match FleetGO, so live data links up by number plate. Make/model, seats and home depot are placeholders to edit in **Data**.
   - Example projects on real Rhein-Main streets (no house numbers). The project names and clients are fictional.

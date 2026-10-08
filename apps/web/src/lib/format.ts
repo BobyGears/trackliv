@@ -47,6 +47,17 @@ export function opsTime(date: string, hhmm: string | undefined): Date | null {
   return new Date(opsDayStart(date) + (h * 60 + mi) * 60000);
 }
 
+const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: OPS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+/** YYYY-MM-DD of an instant in the depots' time zone. */
+export const opsDate = (ms: number) => ymd.format(ms);
+
+/** Distance with the UI's decimal separator: "850 m", "4,2 km", "37 km". */
+export function fmtDistance(m: number): string {
+  if (!Number.isFinite(m)) return '–';
+  if (m < 1000) return `${Math.round(m)} m`;
+  return `${(m / 1000).toLocaleString(locale(), { maximumFractionDigits: m < 10000 ? 1 : 0, minimumFractionDigits: m < 10000 ? 1 : 0 })} km`;
+}
+
 export function addDays(date: string, n: number): string {
   const [y, m, d] = date.split('-').map(Number);
   const t = new Date(Date.UTC(y, m - 1, d + n));

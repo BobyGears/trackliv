@@ -51,6 +51,33 @@ function circle(center: LngLat, radiusM: number, steps = 64): [number, number][]
   return pts;
 }
 
+/** Small chevron drawn along the history track to show the driving direction. */
+function arrowImage(): ImageData {
+  const size = 24;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const chevron = () => {
+    g.beginPath();
+    g.moveTo(8, 6);
+    g.lineTo(15, 12);
+    g.lineTo(8, 18);
+    g.stroke();
+  };
+  g.strokeStyle = 'rgba(20, 40, 110, 0.55)';
+  g.lineWidth = 5;
+  chevron();
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 2.6;
+  chevron();
+  return g.getImageData(0, 0, size, size);
+}
+
+const HISTORY_COLOR = '#2f6bff';
+const STOP_COLOR = { site: '#1f4fd6', project: '#12a150', other: '#64748b' } as const;
+
 function meanHeading(hs: number[]) {
   let x = 0;
   let y = 0;
@@ -170,6 +197,90 @@ class MapController {
     );
     map.addLayer({ id: 'tl-routes-hit', type: 'line', source: 'tl-routes', paint: { 'line-color': '#000', 'line-width': 14, 'line-opacity': 0 } }, before);
 
+    // Vehicle history (history tab): the day's trips and numbered stops
+    map.addSource('tl-history', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('tl-history-stops', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    if (!map.hasImage('tl-arrow')) map.addImage('tl-arrow', arrowImage(), { pixelRatio: 2 });
+    const dimmed = ['case', ['get', 'dim'], 0.3, 1] as const;
+    map.addLayer(
+      {
+        id: 'tl-history-casing',
+        type: 'line',
+        source: 'tl-history',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, ['case', ['get', 'active'], 7, 5], 16, ['case', ['get', 'active'], 13, 10]],
+          'line-opacity': ['case', ['get', 'dim'], 0.35, 0.95],
+        },
+      },
+      before,
+    );
+    map.addLayer(
+      {
+        id: 'tl-history-line',
+        type: 'line',
+        source: 'tl-history',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': HISTORY_COLOR,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 8, ['case', ['get', 'active'], 4.5, 3], 16, ['case', ['get', 'active'], 8.5, 6]],
+          'line-opacity': dimmed as never,
+        },
+      },
+      before,
+    );
+    map.addLayer(
+      {
+        id: 'tl-history-arrows',
+        type: 'symbol',
+        source: 'tl-history',
+        minzoom: 10,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 10, 60, 16, 110],
+          'icon-image': 'tl-arrow',
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 10, 0.8, 16, 1.15],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: { 'icon-opacity': dimmed as never },
+      },
+      before,
+    );
+    map.addLayer(
+      {
+        id: 'tl-history-stops',
+        type: 'circle',
+        source: 'tl-history-stops',
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 8, 16, 11],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2.5,
+          'circle-pitch-alignment': 'map',
+        },
+      },
+      before,
+    );
+    map.addLayer(
+      {
+        id: 'tl-history-stop-labels',
+        type: 'symbol',
+        source: 'tl-history-stops',
+        layout: {
+          'text-field': ['get', 'n'],
+          'text-font': ['Noto Sans Medium'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 16, 12.5],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: { 'text-color': '#ffffff' },
+      },
+      before,
+    );
+
     this.hq = new HqLayer(s.siteGeo, s.theme);
     map.addLayer(this.hq, map.getLayer('hq-street-labels') ? 'hq-street-labels' : undefined);
     this.applyLayers(useStore.getState());
@@ -209,6 +320,7 @@ class MapController {
 
     this.loaded = true;
     this.syncAll();
+    this.syncHistory(useStore.getState());
     this.fitAll(false);
     const pending = useStore.getState().focus;
     if (pending) this.focus(pending);
@@ -225,6 +337,7 @@ class MapController {
         if (st.focus && st.focus !== p.focus) this.focus(st.focus);
         if (st.mapPick !== p.mapPick) map.getCanvas().style.cursor = st.mapPick ? 'crosshair' : '';
         if (st.layers !== p.layers) this.applyLayers(st);
+        if (st.track !== p.track) this.syncHistory(st);
         if (st.lang !== p.lang) this.syncAll();
         if (st.is3d !== p.is3d) map.easeTo({ pitch: st.is3d ? 55 : 0, duration: 700 });
         if (
@@ -339,6 +452,19 @@ class MapController {
       }
       case 'lnglat':
         fly({ lng: f.lng, lat: f.lat }, f.zoom ?? 15);
+        return;
+      case 'bounds': {
+        const [w, sth, e, n] = f.bounds;
+        const small = this.map.getContainer().clientWidth < 900;
+        this.map.fitBounds(
+          [
+            [w, sth],
+            [e, n],
+          ],
+          { padding: small ? 40 : { top: 150, bottom: 200, left: 80, right: 400 }, maxZoom: 16.5, pitch: Math.min(this.map.getPitch(), 40), duration: 1400 },
+        );
+        return;
+      }
     }
   }
 
@@ -448,6 +574,34 @@ class MapController {
     if (sel?.type === 'project') dest = st.projects.find((p) => p.id === sel.id)?.location ?? null;
     if (dest) fences.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [circle(dest, ARRIVE_RADIUS_M)] }, properties: { color: '#12a150' } });
     (this.map.getSource('tl-geofence') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features: fences });
+  }
+
+  private syncHistory(st: S) {
+    if (!this.loaded) return;
+    const tr = st.track;
+    const lines: GeoJSON.Feature[] = [];
+    const stops: GeoJSON.Feature[] = [];
+    if (tr) {
+      const { points, trips } = tr.history;
+      trips.forEach((trip, i) => {
+        const coords = points.filter((p) => p[0] >= trip.start && p[0] <= trip.end).map((p) => [p[1], p[2]]);
+        if (coords.length < 2) return;
+        lines.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: { i, active: tr.active === i, dim: tr.active !== null && tr.active !== i },
+        });
+      });
+      tr.history.stops.forEach((stop, i) => {
+        stops.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [stop.location.lng, stop.location.lat] },
+          properties: { n: String(i + 1), color: STOP_COLOR[stop.place?.kind ?? 'other'] },
+        });
+      });
+    }
+    (this.map.getSource('tl-history') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features: lines });
+    (this.map.getSource('tl-history-stops') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features: stops });
   }
 
   private syncMarkers() {

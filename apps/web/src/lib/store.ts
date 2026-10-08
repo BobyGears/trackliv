@@ -20,7 +20,7 @@ import {
   type Vehicle,
 } from '@trackliv/core';
 import { create } from 'zustand';
-import { ApiError, UNAUTHORIZED_EVENT, api, authApi, openStream, type ClockSnapshot, type SiteGeo } from './api';
+import { ApiError, UNAUTHORIZED_EVENT, api, authApi, openStream, type ClockSnapshot, type SiteGeo, type VehicleHistory } from './api';
 import { getLang, setLang as setI18nLang, t, type Lang } from './i18n';
 
 export type ObjectType = 'vehicle' | 'person' | 'project' | 'site';
@@ -44,7 +44,14 @@ export type FocusRequest =
   | { kind: 'site'; id: ID; nonce: number }
   | { kind: 'vehicle'; id: ID; nonce: number }
   | { kind: 'project'; id: ID; nonce: number }
-  | { kind: 'lnglat'; lng: number; lat: number; zoom?: number; nonce: number };
+  | { kind: 'lnglat'; lng: number; lat: number; zoom?: number; nonce: number }
+  | { kind: 'bounds'; bounds: [number, number, number, number]; nonce: number };
+
+/** A vehicle's recorded day drawn on the map (history tab); `active` = highlighted trip. */
+export interface TrackOverlay {
+  history: VehicleHistory;
+  active: number | null;
+}
 
 /** One-shot "click on the map" request (custom destinations, project locations …). */
 export interface MapPick {
@@ -88,6 +95,7 @@ interface State {
   eventsOpen: boolean;
   focus: FocusRequest | null;
   mapPick: MapPick | null;
+  track: TrackOverlay | null;
   layers: { routes: boolean; labels: boolean; buildings: boolean; crew: boolean; streets: boolean };
   is3d: boolean;
   toasts: Toast[];
@@ -113,6 +121,7 @@ interface Actions {
   setEventsOpen(open: boolean): void;
   requestFocus(f: Omit<FocusRequest, 'nonce'> | FocusRequest): void;
   setMapPick(p: MapPick | null): void;
+  setTrack(t: TrackOverlay | null): void;
   toggleLayer(k: keyof State['layers']): void;
   set3d(on: boolean): void;
   toast(t: Omit<Toast, 'id'>): void;
@@ -205,6 +214,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   eventsOpen: false,
   focus: null,
   mapPick: null,
+  track: null,
   layers: { routes: true, labels: true, buildings: true, crew: true, streets: true },
   is3d: true,
   toasts: [],
@@ -330,6 +340,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   setEventsOpen: (eventsOpen) => set({ eventsOpen, unread: eventsOpen ? 0 : get().unread }),
   requestFocus: (f) => set({ focus: { ...f, nonce: Date.now() + Math.random() } as FocusRequest }),
   setMapPick: (mapPick) => set({ mapPick }),
+  setTrack: (track) => set({ track }),
   toggleLayer: (k) => set((s) => ({ layers: { ...s.layers, [k]: !s.layers[k] } })),
   set3d: (is3d) => set({ is3d }),
   toast: (t) => {

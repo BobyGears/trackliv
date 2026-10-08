@@ -37,6 +37,7 @@ import { broadcast, clientCount, sseHandler } from './hub.ts';
 import { ops } from './ops.ts';
 import { demoPeople, demoProjects, demoVehicles } from './seed.ts';
 import { resetSimVehicle, startSimulator } from './simulator.ts';
+import { flushHistory, historyDays, vehicleHistory } from './history.ts';
 
 // ---------------------------------------------------------------------------------------------
 // First start: seed master data and a randomized plan for today.
@@ -237,6 +238,14 @@ app.post('/api/plans/:date/recall', (req, res) =>
   patchAssignment(req, res, (a, now) => ({ ...a, returnAt: hhmm(now) }), (c) => `${c} recalled to depot`),
 );
 
+// Vehicle history: track, stops and trips of one day (recorded from FleetGO / simulator positions)
+app.get('/api/history/:vehicleId', (req, res) => {
+  const vehicleId = String(req.params.vehicleId);
+  if (!db.data.vehicles.some((v) => v.id === vehicleId)) return void res.status(404).json({ error: 'Unknown vehicle' });
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? String(req.query.date) : ops.today();
+  res.json({ ...vehicleHistory(vehicleId, date), days: historyDays().slice(0, 60) });
+});
+
 app.post('/api/routes', (req, res) => {
   const legs = (req.body?.legs ?? []) as { id: string; from: LngLat; to: LngLat }[];
   const out: Record<string, ReturnType<typeof routeBetween>> = {};
@@ -419,9 +428,11 @@ app.listen(config.port, () => {
 
 process.on('SIGINT', () => {
   db.flush();
+  flushHistory();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   db.flush();
+  flushHistory();
   process.exit(0);
 });

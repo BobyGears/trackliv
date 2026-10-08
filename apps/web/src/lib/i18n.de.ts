@@ -471,6 +471,26 @@ export const DE: Record<string, string> = {
   '{m} min ago': 'vor {m} min',
   '{h} h {m} min ago': 'vor {h} h {m} min',
 
+  // --- vehicle history ------------------------------------------------------------------------------------
+  History: 'Verlauf',
+  'Choose a day': 'Tag wählen',
+  'Loading history…': 'Verlauf wird geladen…',
+  'Could not load the history': 'Der Verlauf konnte nicht geladen werden',
+  Distance: 'Strecke',
+  Driving: 'Fahrzeit',
+  Stops: 'Stopps',
+  'On the road {from} – {to}': 'Unterwegs {from} – {to}',
+  'Nothing recorded on this day': 'An diesem Tag wurde nichts aufgezeichnet',
+  'TrackLiv records every position it receives and keeps it for {n} days.': 'TrackLiv zeichnet jede empfangene Position auf und bewahrt sie {n} Tage auf.',
+  Timeline: 'Tagesablauf',
+  '{n} trip': '{n} Fahrt',
+  '{n} trips': '{n} Fahrten',
+  'Recorded by TrackLiv from the positions FleetGO reports (stops from 3 minutes).': 'Von TrackLiv aus den FleetGO-Positionen aufgezeichnet (Stopps ab 3 Minuten).',
+  'Unknown place': 'Unbekannter Ort',
+  'since {time}': 'seit {time}',
+  'driving since {time}': 'unterwegs seit {time}',
+  'max {v} km/h': 'max. {v} km/h',
+
   // --- fixed server / planner messages -------------------------------------------------------------------
   'FleetGO connected': 'FleetGO verbunden',
   'FleetGO sync failed': 'FleetGO-Abgleich fehlgeschlagen',

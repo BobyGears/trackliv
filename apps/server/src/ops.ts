@@ -16,6 +16,7 @@ import {
 } from '@trackliv/core';
 import { OpsClock } from './clock.ts';
 import { db } from './db.ts';
+import { recordHistory } from './history.ts';
 import { sites } from './geodata.ts';
 import { broadcast } from './hub.ts';
 
@@ -93,6 +94,7 @@ class Ops {
   /** Store positions, advance geofence stages, flag anomalies, and push to clients. */
   ingest(list: Telemetry[]) {
     for (const t of list) this.telemetry.set(t.vehicleId, t);
+    recordHistory(list);
     this.trackStages(list);
     if (!this.silent) broadcast('telemetry', list);
   }

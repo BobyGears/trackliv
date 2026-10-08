@@ -24,6 +24,7 @@ import {
   Building2,
   Crosshair,
   Fuel,
+  History,
   Lock,
   MapPin,
   Navigation,
@@ -43,6 +44,7 @@ import { runInfo, useOpsNow, vehicleKindLabel, vehicleDesc, stageLabel } from '.
 import { PRIORITY_TONE, STAGE_TONE, fmtAgo, fmtDuration, fmtTime } from '../lib/format';
 import { useStore, type Selection } from '../lib/store';
 import { DestinationPicker } from './DestinationPicker';
+import { VehicleHistory } from './VehicleHistory';
 import { Avatar, AvatarStack, Button, IconButton, LicenseChips, Panel, Pill, ProgressBar, Prop, SectionLabel, cx } from './kit';
 import { t, tx } from '../lib/i18n';
 
@@ -61,7 +63,7 @@ export function ObjectPanel() {
   );
 }
 
-function Header({ kicker, title, sub, icon, color, actions }: { kicker: string; title: ReactNode; sub?: ReactNode; icon: ReactNode; color: string; actions?: ReactNode }) {
+function Header({ kicker, title, sub, icon, color, actions, tabs }: { kicker: string; title: ReactNode; sub?: ReactNode; icon: ReactNode; color: string; actions?: ReactNode; tabs?: ReactNode }) {
   const select = useStore((s) => s.select);
   return (
     <div className="sticky top-0 z-10 border-b border-line bg-panel-solid/80 px-4 pb-3 pt-3 backdrop-blur">
@@ -77,7 +79,22 @@ function Header({ kicker, title, sub, icon, color, actions }: { kicker: string; 
       </div>
       <div className="mt-1.5 text-[19px] font-bold leading-tight tracking-tight">{title}</div>
       {sub && <div className="mt-0.5 text-[12px] text-muted">{sub}</div>}
+      {tabs && <div className="-mb-3 mt-2.5 flex gap-4">{tabs}</div>}
     </div>
+  );
+}
+
+function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cx(
+        'flex items-center gap-1.5 border-b-2 pb-2 text-[12.5px] font-semibold transition-colors',
+        active ? 'border-primary text-ink' : 'border-transparent text-muted hover:text-ink-2',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -104,6 +121,7 @@ function VehiclePanel({ id }: { id: ID }) {
   const telemetry = useStore((s) => s.telemetry[id]);
   const [picker, setPicker] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [tab, setTab] = useState<'live' | 'history'>('live');
   const destBtn = useRef<HTMLButtonElement>(null);
   const info = runInfo(id, now);
   if (!info) return null;
@@ -137,8 +155,19 @@ function VehiclePanel({ id }: { id: ID }) {
             <Crosshair size={15} />
           </IconButton>
         }
+        tabs={
+          <>
+            <Tab active={tab === 'live'} onClick={() => setTab('live')}>
+              <Navigation size={12} />{' '}{t('Live')}
+            </Tab>
+            <Tab active={tab === 'history'} onClick={() => setTab('history')}>
+              <History size={12} />{' '}{t('History')}
+            </Tab>
+          </>
+        }
       />
-      <div className="space-y-4 px-4 py-3">
+      {tab === 'history' && <VehicleHistory vehicleId={id} />}
+      <div className={cx('space-y-4 px-4 py-3', tab !== 'live' && 'hidden')}>
         <div className="flex flex-wrap items-center gap-1.5">
           <Pill tone={STAGE_TONE[info.stage]} dot>
             {info.late ? t('Late to depart') : info.stageLabel}

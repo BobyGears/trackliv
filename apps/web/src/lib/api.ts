@@ -1,6 +1,7 @@
 import type {
   Assignment,
   Bootstrap,
+  DayHistory,
   DayPlan,
   FleetStatus,
   LngLat,
@@ -9,6 +10,7 @@ import type {
   Project,
   Route,
   Telemetry,
+  TrackPoint,
   Vehicle,
 } from '@trackliv/core';
 
@@ -31,6 +33,9 @@ export interface SiteGeo {
   yard: { lng: number; lat: number; heading: number }[];
   gate: LngLat;
 }
+
+/** One vehicle's day: the recorded track plus stops and trips; `days` = all days with recordings (newest first). */
+export type VehicleHistory = DayHistory & { date: string; vehicleId: string; points: TrackPoint[]; days: string[] };
 
 export type BootstrapResponse = Bootstrap & { clock: ClockSnapshot; today: string; mode: 'fleetgo' | 'simulator' };
 
@@ -86,6 +91,7 @@ export const api = {
   routes: (legs: { id: string; from: LngLat; to: LngLat }[]) =>
     req<{ routes: Record<string, Route> }>('POST', '/api/routes', { legs }),
   geocode: (q: string) => req<{ results: { label: string; lat: number; lng: number }[] }>('GET', `/api/geocode?q=${encodeURIComponent(q)}`),
+  history: (vehicleId: string, date: string) => req<VehicleHistory>('GET', `/api/history/${encodeURIComponent(vehicleId)}?date=${date}`),
   simSpeed: (speed: number) => req<ClockSnapshot>('POST', '/api/sim/speed', { speed }),
   save: <T extends Person | Project | Vehicle>(kind: 'people' | 'projects' | 'vehicles', item: Partial<T>) =>
     item.id ? req<T>('PUT', `/api/${kind}/${item.id}`, item) : req<T>('POST', `/api/${kind}`, item),
