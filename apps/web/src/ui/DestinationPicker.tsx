@@ -231,8 +231,16 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
         <button
           onClick={() => {
             const st = useStore.getState();
+            const lock_ = lock;
             st.setView('map');
-            st.setMapPick({ purpose: 'custom-destination', vehicleId });
+            st.setMapPick({
+              label: `Click on the map to set ${vehicle?.callsign ?? 'the vehicle'}’s destination`,
+              onPick: (loc) => {
+                const label = q.trim() || `Pin ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`;
+                onSelect({ kind: 'custom', label, location: loc }, lock_);
+                useStore.getState().toast({ kind: 'success', title: `${vehicle?.callsign ?? 'Vehicle'} → ${label}`, detail: 'Type a name in the search box first to label the pin.' });
+              },
+            });
             onClose();
           }}
           className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-panel-3"

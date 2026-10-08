@@ -85,13 +85,12 @@ export function EventsDrawer() {
 
 export function MapPickBanner() {
   const pick = useStore((s) => s.mapPick);
-  const vehicle = useStore((s) => s.vehicles.find((v) => v.id === s.mapPick?.vehicleId));
   if (!pick) return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-[76px] z-40 flex justify-center">
       <div className="glass fade-in pointer-events-auto flex items-center gap-3 rounded-full py-1.5 pl-3 pr-1.5 shadow-float ring-2 ring-primary">
         <Crosshair size={16} className="text-primary" />
-        <span className="font-semibold">Click on the map to set {vehicle?.callsign ?? 'the vehicle'}’s destination</span>
+        <span className="font-semibold">{pick.label}</span>
         <Button size="sm" variant="ghost" onClick={() => useStore.getState().setMapPick(null)}>
           Cancel <span className="text-subtle">Esc</span>
         </Button>
@@ -131,6 +130,7 @@ export function useShortcuts() {
       if (e.key === '1') st.setView('map');
       else if (e.key === '2') st.setView('dispatch');
       else if (e.key === '3') st.setView('schedule');
+      else if (e.key === '4') st.setView('data');
       else if (e.key === '/') {
         e.preventDefault();
         st.setPalette(true);

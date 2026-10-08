@@ -2,6 +2,9 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   useDraggable,
   useDroppable,
   useSensor,
@@ -61,6 +64,12 @@ import { Avatar, Button, IconButton, LicenseChips, Panel, Pill, Segmented, cx } 
 
 type RosterFilter = 'all' | 'unassigned' | 'assigned' | 'off';
 
+/** Drop where the pointer is; fall back to overlap for keyboard / edge cases. */
+const collision: CollisionDetection = (args) => {
+  const hits = pointerWithin(args);
+  return hits.length ? hits : rectIntersection(args);
+};
+
 export function DispatchBoard() {
   const vehicles = useStore((s) => s.vehicles);
   const people = useStore((s) => s.people);
@@ -85,15 +94,15 @@ export function DispatchBoard() {
   const visibleVehicles = vehicles.filter((v) => siteFilter === 'all' || v.homeSiteId === siteFilter);
 
   const onDragStart = (e: DragStartEvent) => {
-    const pid = String(e.active.id).split(':')[1];
+    const pid = (e.active.data.current as { personId?: string } | undefined)?.personId;
     setDragging(people.find((p) => p.id === pid) ?? null);
   };
   const onDragEnd = (e: DragEndEvent) => {
     setDragging(null);
     if (scenario) return;
-    const pid = String(e.active.id).split(':')[1];
+    const pid = (e.active.data.current as { personId?: string } | undefined)?.personId;
     const over = e.over ? String(e.over.id) : null;
-    if (!over) return;
+    if (!over || !pid) return;
     const p = people.find((x) => x.id === pid);
     if (!p) return;
     if (over === 'roster') {
@@ -115,63 +124,67 @@ export function DispatchBoard() {
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
       <div className="pointer-events-auto absolute inset-x-3 bottom-3 top-[76px] z-20 flex gap-3">
         <Roster siteFilter={siteFilter} onGroup={() => setGroupOpen(true)} />
         <Panel className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
-            <div className="mr-1">
-              <div className="text-[15px] font-bold leading-tight">{scenario ? 'Scenario preview' : 'Dispatch board'}</div>
-              <div className="text-[11.5px] text-muted">
-                {scenario ? 'Proposed by Randomize – nothing is saved until you apply it' : 'Drag people onto vehicles · click a destination to change it'}
+          <div className="border-b border-line px-4 pb-2 pt-2.5">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-bold leading-tight">{scenario ? 'Scenario preview' : 'Dispatch board'}</div>
+                <div className="truncate text-[11.5px] text-muted">
+                  {scenario ? 'Proposed by Randomize – nothing is saved until you apply it' : 'Drag people onto vehicles · click a destination to change it · 🔒 pins survive Randomize'}
+                </div>
               </div>
+              {!scenario && (
+                <>
+                  <IconButton label="Undo (⌘Z)" disabled={!history.length} onClick={() => useStore.getState().undo()}>
+                    <Undo2 size={15} />
+                  </IconButton>
+                  <IconButton label="Redo (⌘⇧Z)" disabled={!future.length} onClick={() => useStore.getState().redo()}>
+                    <Redo2 size={15} />
+                  </IconButton>
+                  <Button
+                    size="sm"
+                    icon={<Eraser size={13} />}
+                    onClick={() => commit((list) => clearUnlocked(list), 'Cleared all unpinned assignments')}
+                    title="Remove everyone and every destination that is not pinned (vehicles on the road are kept)"
+                  >
+                    Clear unpinned
+                  </Button>
+                  <Button size="sm" variant="violet" icon={<Shuffle size={13} />} onClick={() => useStore.getState().previewRandomize({ siteId: siteFilter === 'all' ? undefined : siteFilter })}>
+                    Randomize
+                  </Button>
+                </>
+              )}
             </div>
-            {!scenario && <DateNav />}
-            {!scenario && (
-              <div className="flex gap-1">
-                {errors > 0 && <Pill tone="danger">{errors} error{errors > 1 ? 's' : ''}</Pill>}
-                {warnings > 0 && (
-                  <span title={issues.filter((i) => i.severity === 'warning').map((i) => i.message).join('\n')}>
-                    <Pill tone="warning">
-                      <AlertTriangle size={11} /> {warnings} warning{warnings > 1 ? 's' : ''}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {!scenario && <DateNav />}
+              {!scenario && (
+                <div className="flex gap-1">
+                  {errors > 0 && <Pill tone="danger">{errors} error{errors > 1 ? 's' : ''}</Pill>}
+                  {warnings > 0 && (
+                    <span title={issues.filter((i) => i.severity === 'warning').map((i) => i.message).join('\n')}>
+                      <Pill tone="warning">
+                        <AlertTriangle size={11} /> {warnings} warning{warnings > 1 ? 's' : ''}
+                      </Pill>
+                    </span>
+                  )}
+                  {errors + warnings === 0 && (
+                    <Pill tone="success">
+                      <Check size={11} /> Plan OK
                     </Pill>
-                  </span>
-                )}
-                {errors + warnings === 0 && (
-                  <Pill tone="success">
-                    <Check size={11} /> Plan OK
-                  </Pill>
-                )}
-              </div>
-            )}
-            <div className="flex-1" />
-            <Segmented
-              size="sm"
-              value={siteFilter}
-              onChange={setSiteFilter}
-              options={[{ value: 'all', label: 'All depots' }, ...sites.map((s) => ({ value: s.id, label: s.code }))]}
-            />
-            {!scenario && (
-              <>
-                <IconButton label="Undo (⌘Z)" disabled={!history.length} onClick={() => useStore.getState().undo()}>
-                  <Undo2 size={15} />
-                </IconButton>
-                <IconButton label="Redo (⌘⇧Z)" disabled={!future.length} onClick={() => useStore.getState().redo()}>
-                  <Redo2 size={15} />
-                </IconButton>
-                <Button
-                  size="sm"
-                  icon={<Eraser size={13} />}
-                  onClick={() => commit((list) => clearUnlocked(list), 'Cleared all unpinned assignments')}
-                  title="Remove everyone and every destination that is not pinned (vehicles on the road are kept)"
-                >
-                  Clear unpinned
-                </Button>
-                <Button size="sm" variant="violet" icon={<Shuffle size={13} />} onClick={() => useStore.getState().previewRandomize({ siteId: siteFilter === 'all' ? undefined : siteFilter })}>
-                  Randomize
-                </Button>
-              </>
-            )}
+                  )}
+                </div>
+              )}
+              <div className="flex-1" />
+              <Segmented
+                size="sm"
+                value={siteFilter}
+                onChange={setSiteFilter}
+                options={[{ value: 'all', label: 'All depots' }, ...sites.map((s) => ({ value: s.id, label: s.code }))]}
+              />
+            </div>
           </div>
           <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-3">
             {sites
@@ -319,13 +332,19 @@ function RosterRow({ person, assignment, selected, disabled }: { person: Person;
   const vehicles = useStore((s) => s.vehicles);
   const toggle = useStore((s) => s.togglePersonSelected);
   const select = useStore((s) => s.select);
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `person:${person.id}`, disabled: disabled || person.status !== 'available' });
+  // Draggable ids must be unique per element (a person is also draggable from their seat).
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `roster:${person.id}`,
+    data: { personId: person.id },
+    disabled: disabled || person.status !== 'available',
+  });
   const v = assignment ? vehicles.find((x) => x.id === assignment.vehicleId) : undefined;
   const locked = assignment?.lockedCrew.includes(person.id);
   const off = person.status !== 'available';
   return (
     <div
       ref={setNodeRef}
+      data-testid={`roster-${person.id}`}
       className={cx('group flex items-center gap-2 rounded-lg px-1.5 py-1', selected ? 'bg-primary-weak' : 'hover:bg-panel-3', isDragging && 'opacity-40', off && 'opacity-60')}
     >
       <input
@@ -336,7 +355,7 @@ function RosterRow({ person, assignment, selected, disabled }: { person: Person;
         className="size-3.5 shrink-0 accent-[var(--primary)]"
         aria-label={`Select ${fullName(person)}`}
       />
-      <span {...listeners} {...attributes} className={cx('flex min-w-0 flex-1 items-center gap-2', !off && !disabled && 'cursor-grab active:cursor-grabbing')}>
+      <span {...listeners} {...attributes} data-testid={`drag-${person.id}`} className={cx('flex min-w-0 flex-1 items-center gap-2', !off && !disabled && 'cursor-grab active:cursor-grabbing')}>
         <Avatar person={person} size={26} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[12.5px] font-semibold">{fullName(person)}</span>
@@ -383,6 +402,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
   return (
     <div
       ref={setNodeRef}
+      data-testid={`vehicle-card-${vehicle.callsign}`}
       className={cx(
         'relative flex flex-col overflow-hidden rounded-xl border bg-panel-solid shadow-sm transition-all',
         isOver ? 'border-primary ring-2 ring-primary/40' : 'border-line',
@@ -444,6 +464,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
       <div className="mt-auto space-y-1.5 border-t border-line bg-panel-2 px-2.5 py-2 pl-3.5">
         <button
           ref={destBtn}
+          data-testid={`dest-${vehicle.callsign}`}
           disabled={readOnly || inactive}
           onClick={() => setPicker(true)}
           className={cx(
@@ -516,7 +537,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
 
 function SeatRow({ person, vehicle, locked, isNew, readOnly, driver }: { person: Person; vehicle: Vehicle; locked: boolean; isNew: boolean; readOnly: boolean; driver: boolean }) {
   const commit = useStore((s) => s.commit);
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `person:${person.id}`, disabled: readOnly });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `seat:${vehicle.id}:${person.id}`, data: { personId: person.id }, disabled: readOnly });
   return (
     <div
       ref={setNodeRef}
@@ -606,7 +627,7 @@ function GroupDialog({ personIds, onClose }: { personIds: ID[]; onClose: () => v
           ))}
         </div>
         <Field label="Destination">
-          <button ref={destBtn} onClick={() => setPicker(true)} className="flex h-9 w-full items-center gap-2 rounded-lg border border-line-strong bg-panel-solid px-2.5 text-left hover:border-primary">
+          <button ref={destBtn} data-testid="group-dest" onClick={() => setPicker(true)} className="flex h-9 w-full items-center gap-2 rounded-lg border border-line-strong bg-panel-solid px-2.5 text-left hover:border-primary">
             <MapPin size={14} className="text-primary" />
             <span className={cx('flex-1 truncate font-semibold', !dest && 'text-muted')}>{dest ? destinationLabel(dest, projects) : 'Choose a project or custom destination…'}</span>
           </button>

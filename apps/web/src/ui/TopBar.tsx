@@ -1,5 +1,5 @@
 import { isAtDepot } from '@trackliv/core';
-import { Bell, CalendarRange, ChevronDown, Gauge, Map as MapIcon, Moon, Search, Sun, Users, Warehouse } from 'lucide-react';
+import { Bell, CalendarRange, ChevronDown, Database, Gauge, Map as MapIcon, Moon, Search, Sun, Users, Warehouse } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useOpsNow } from '../lib/derived';
 import { fmtAgo, fmtDate, fmtTimeSec } from '../lib/format';
@@ -16,7 +16,7 @@ function Logo() {
           <path d="M27 14.5 17.4 20v9.5L27 24z" fill="#fff" opacity=".6" />
         </svg>
       </div>
-      <div className="leading-tight">
+      <div className="whitespace-nowrap leading-tight">
         <div className="text-[15px] font-bold tracking-tight">TrackLiv</div>
         <div className="text-[10px] font-medium text-muted">DTE GmbH · Dispatch</div>
       </div>
@@ -53,13 +53,13 @@ function SiteSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex h-9 items-center gap-2 rounded-xl border border-line bg-panel-solid px-2 pr-2.5 text-left hover:bg-panel-2"
+        className="flex h-9 items-center gap-2 whitespace-nowrap rounded-xl border border-line bg-panel-solid px-2 pr-2.5 text-left hover:bg-panel-2"
       >
         <span className="grid size-6 place-items-center rounded-md text-white" style={{ background: current?.color ?? '#1f4fd6' }}>
           <Warehouse size={13} />
         </span>
         <span className="leading-tight">
-          <span className="block max-w-44 truncate text-[12px] font-semibold">{current ? current.name : 'All projects · Rhein-Main'}</span>
+          <span className="block max-w-40 truncate text-[12px] font-semibold">{current ? current.name : 'All projects · Rhein-Main'}</span>
           <span className="block text-[10.5px] text-muted">
             {current ? `${inYard(current.id)} in yard · ${current.code}` : `${inYard()}/${vehicles.length} vehicles in yard`}
           </span>
@@ -110,12 +110,12 @@ function LiveClock() {
       <button
         onClick={() => mode === 'simulator' && setOpen(!open)}
         title={mode === 'fleetgo' ? `FleetGO · last sync ${fmtAgo(fleet.lastSync, now)}${fleet.error ? ` · ${fleet.error}` : ''}` : 'Simulated fleet (no FleetGO credentials configured)'}
-        className="flex h-9 items-center gap-2 rounded-xl border border-line bg-panel-solid px-2.5"
+        className="flex h-9 items-center gap-2 whitespace-nowrap rounded-xl border border-line bg-panel-solid px-2.5"
       >
         <span className={cx('size-2 rounded-full', ok ? 'live-dot bg-success' : 'bg-danger')} />
         <span className={cx('text-[12px] font-semibold', ok ? 'text-success' : 'text-danger')}>{ok ? 'Live' : 'Offline'}</span>
         <span className="mono text-[12px] font-semibold text-ink">{fmtTimeSec(now)}</span>
-        <span className="hidden text-[11px] text-muted xl:inline">{date && fmtDate(date)}</span>
+        <span className="hidden text-[11px] text-muted 2xl:inline">{date && fmtDate(date)}</span>
         <span className={cx('rounded-md px-1.5 py-0.5 text-[10px] font-bold', mode === 'fleetgo' ? 'bg-success-weak text-success' : 'bg-violet-weak text-violet')}>
           {mode === 'fleetgo' ? 'FleetGO' : `SIM ×${clock.speed}`}
         </span>
@@ -153,11 +153,11 @@ function PlanDateChip() {
   return (
     <button
       onClick={() => useStore.getState().setDate(today)}
-      className="flex h-9 items-center gap-1.5 rounded-xl bg-violet-weak px-3 text-[12px] font-semibold text-violet"
+      className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-violet-weak px-3 text-[12px] font-semibold text-violet"
       title="You are editing another day's plan – click to go back to today"
     >
-      <CalendarRange size={14} /> Planning {fmtDate(date)}
-      <span className="hidden font-medium opacity-80 2xl:inline">· back to today</span>
+      <CalendarRange size={14} /> {fmtDate(date)}
+      <span className="font-medium opacity-80">· back to today</span>
     </button>
   );
 }
@@ -187,6 +187,7 @@ export function TopBar() {
           { value: 'map', label: <><MapIcon size={14} /> Map</>, title: 'Map (1)' },
           { value: 'dispatch', label: <><Users size={14} /> Dispatch</>, title: 'Dispatch board (2)' },
           { value: 'schedule', label: <><CalendarRange size={14} /> Schedule</>, title: 'Schedule (3)' },
+          { value: 'data', label: <><Database size={14} /> <span className="hidden xl:inline">Data</span></>, title: 'Projects, crew & vehicles (4)' },
         ]}
       />
       <button
@@ -237,7 +238,7 @@ export function TopBar() {
             .slice(0, 2)
             .toUpperCase()}
         </span>
-        <span className="hidden text-left leading-tight lg:block">
+        <span className="hidden whitespace-nowrap text-left leading-tight 2xl:block">
           <span className="block text-[12px] font-semibold">{user}</span>
           <span className="block text-[10.5px] text-muted">Operations</span>
         </span>

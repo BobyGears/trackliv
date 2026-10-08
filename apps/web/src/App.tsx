@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from './lib/store';
 import { MapView } from './map/MapView';
 import { CommandPalette } from './ui/CommandPalette';
+import { DataView } from './ui/DataView';
 import { DispatchBoard } from './ui/DispatchBoard';
 import { KpiCards } from './ui/KpiCards';
 import { MapControls } from './ui/MapControls';
@@ -63,6 +64,7 @@ export function App() {
           </>
         )}
         {view === 'dispatch' && <DispatchBoard />}
+        {view === 'data' && <DataView />}
         {view === 'schedule' && (
           <>
             <KpiCards />

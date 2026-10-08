@@ -3,6 +3,7 @@ import {
   Building2,
   CalendarRange,
   Crosshair,
+  Database,
   Gauge,
   Moon,
   Redo2,
@@ -59,6 +60,7 @@ export function CommandPalette() {
       { id: 'a-rand', group: 'Actions', icon: <Shuffle size={15} />, title: 'Randomize assignments', sub: 'Preview a random crew/project plan – pins are kept', keywords: 'random shuffle shake assign plan', run: () => { close(); st().setView('dispatch'); st().previewRandomize(); } },
       { id: 'a-disp', group: 'Actions', icon: <Users size={15} />, title: 'Open dispatch board', keywords: 'board crew roster assign', run: () => { close(); st().setView('dispatch'); } },
       { id: 'a-sched', group: 'Actions', icon: <CalendarRange size={15} />, title: 'Open schedule', keywords: 'gantt timeline time', run: () => { close(); st().setView('schedule'); } },
+      { id: 'a-data', group: 'Actions', icon: <Database size={15} />, title: 'Manage projects, crew & vehicles', keywords: 'data master add new project person vehicle edit settings', run: () => { close(); st().setView('data'); } },
       { id: 'a-fit', group: 'Actions', icon: <ScanSearch size={15} />, title: 'Show all projects', sub: 'Regional overview', keywords: 'fit overview region map zoom', run: () => { close(); st().setView('map'); st().select(null); st().requestFocus({ kind: 'fit-all' }); } },
       { id: 'a-theme', group: 'Actions', icon: <Moon size={15} />, title: 'Toggle dark mode', keywords: 'theme dark light night', run: () => { close(); st().toggleTheme(); } },
       { id: 'a-undo', group: 'Actions', icon: <Undo2 size={15} />, title: 'Undo last change', keywords: 'undo revert', run: () => { close(); st().undo(); } },
@@ -151,7 +153,7 @@ export function CommandPalette() {
             <Kbd>↵</Kbd> open
           </span>
           <span className="ml-auto">
-            <Kbd>1</Kbd> <Kbd>2</Kbd> <Kbd>3</Kbd> switch view · <Kbd>R</Kbd> randomize · <Kbd>⌘Z</Kbd> undo
+            <Kbd>1</Kbd>–<Kbd>4</Kbd> switch view · <Kbd>R</Kbd> randomize · <Kbd>⌘Z</Kbd> undo
           </span>
         </div>
       </div>

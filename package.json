@@ -2,7 +2,7 @@
   "name": "trackliv",
   "version": "0.1.0",
   "private": true,
-  "description": "TrackLiv – live crew & vehicle dispatch and schedule tracking for DTE GmbH (Flörsheim am Main).",
+  "description": "TrackLiv \u2013 live crew & vehicle dispatch and schedule tracking for DTE GmbH (Fl\u00f6rsheim am Main).",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -14,7 +14,8 @@
     "start": "npm run start -w @trackliv/server",
     "test": "vitest run",
     "typecheck": "tsc -p packages/core && tsc -p apps/server && tsc -p apps/web",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "e2e": "npm run build && node scripts/e2e.mjs"
   },
   "engines": {
     "node": ">=20"

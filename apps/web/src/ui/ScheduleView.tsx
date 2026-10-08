@@ -141,6 +141,7 @@ export function ScheduleView() {
                     ))}
                     {a && dep !== null && ret !== null && a.crew.length > 0 && (
                       <div
+                        data-testid={`bar-${v.callsign}`}
                         onPointerDown={(e) => onPointerDown(e, v, a, 'move')}
                         className={cx('group absolute top-2 h-[30px] rounded-lg border', a.stage === 'planned' ? 'cursor-grab active:cursor-grabbing' : 'cursor-default', pv && 'ring-2 ring-primary')}
                         style={{

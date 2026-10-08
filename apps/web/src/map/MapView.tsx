@@ -4,7 +4,6 @@ import {
   destinationLabel,
   destinationLocation,
   isAtDepot,
-  setDestination,
   type Assignment,
   type LngLat,
   type Telemetry,
@@ -241,14 +240,9 @@ class MapController {
   private onClick(e: maplibregl.MapMouseEvent) {
     const st = useStore.getState();
     if (st.mapPick) {
-      const { vehicleId } = st.mapPick;
-      const loc = { lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6) };
-      st.commit((list) =>
-        setDestination(list, vehicleId, { kind: 'custom', label: `Pin ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`, location: loc }),
-        'Custom destination pinned on map',
-      );
+      const pick = st.mapPick;
       st.setMapPick(null);
-      st.toast({ kind: 'success', title: 'Custom destination set', detail: 'You can rename it in the destination picker.' });
+      pick.onPick({ lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6) });
       return;
     }
     const picked = this.hq?.pick(e.point);

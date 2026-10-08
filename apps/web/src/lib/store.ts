@@ -27,7 +27,7 @@ export interface Selection {
   type: ObjectType;
   id: ID;
 }
-export type View = 'map' | 'dispatch' | 'schedule';
+export type View = 'map' | 'dispatch' | 'schedule' | 'data';
 export type Theme = 'light' | 'dark';
 
 export interface Toast {
@@ -45,9 +45,10 @@ export type FocusRequest =
   | { kind: 'project'; id: ID; nonce: number }
   | { kind: 'lnglat'; lng: number; lat: number; zoom?: number; nonce: number };
 
+/** One-shot "click on the map" request (custom destinations, project locations …). */
 export interface MapPick {
-  purpose: 'custom-destination';
-  vehicleId: ID;
+  label: string;
+  onPick: (loc: { lng: number; lat: number }) => void;
 }
 
 interface State {
