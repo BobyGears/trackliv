@@ -99,8 +99,8 @@ function profile(points: [number, number][], width: number, mat: THREE.Material)
   const shape = new THREE.Shape(points.map(([z, y]) => new THREE.Vector2(z, y)));
   const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 2 });
   geo.translate(0, 0, -width / 2);
-  // shape x → vehicle z, extrusion z → vehicle x
-  geo.rotateY(Math.PI / 2);
+  // shape x → vehicle z (front stays at -z), extrusion z → vehicle x
+  geo.rotateY(-Math.PI / 2);
   const m = new THREE.Mesh(geo, mat);
   m.castShadow = true;
   m.receiveShadow = true;

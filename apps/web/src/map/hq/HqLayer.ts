@@ -47,8 +47,13 @@ interface VehicleObj {
   to: { x: number; z: number; h: number };
   t0: number;
   dur: number;
+  /** Heading as drawn (radians, three.js y-rotation), eased towards where the vehicle is going. */
+  h: number;
   state: VehicleState;
 }
+
+/** How quickly a vehicle turns towards its new direction (1/s) – higher is snappier. */
+const TURN_RATE = 5;
 
 const MIN_ZOOM = 13;
 
@@ -196,7 +201,7 @@ export class HqLayer implements CustomLayerInterface {
         model.group.userData.vehicleId = st.id;
         model.group.traverse((o) => (o.userData.vehicleId = st.id));
         const ring = buildRing(st.kind === 'truck' ? 5.2 : 4.3, st.color);
-        v = { model, ring, kind: st.kind, from: { x: p.x, z: p.z, h }, to: { x: p.x, z: p.z, h }, t0: now, dur: 1, state: st };
+        v = { model, ring, kind: st.kind, from: { x: p.x, z: p.z, h }, to: { x: p.x, z: p.z, h }, t0: now, dur: 1, h, state: st };
         this.vehicles.set(st.id, v);
         this.vehiclesGroup.add(model.group, ring);
       } else {
@@ -206,6 +211,7 @@ export class HqLayer implements CustomLayerInterface {
         v.to = { x: p.x, z: p.z, h: unwrap(cur.h, h) };
         v.t0 = now;
         v.dur = jump ? 1 : interpMs;
+        if (jump) v.h = h;
       }
       v.state = st;
       for (const m of v.ring.children) ((m as THREE.Mesh).material as THREE.MeshBasicMaterial).color.set(st.selected ? '#2f6bff' : st.color);
@@ -290,8 +296,15 @@ export class HqLayer implements CustomLayerInterface {
     for (const v of this.vehicles.values()) {
       const p = this.pose(v, now);
       if (now - v.t0 < v.dur) animating = true;
+      // Face the way the vehicle is actually moving on screen; parked: the reported heading.
+      const dx = v.to.x - v.from.x;
+      const dz = v.to.z - v.from.z;
+      const target = now - v.t0 < v.dur && Math.hypot(dx, dz) > 1.5 ? -Math.atan2(dx, -dz) : p.h;
+      const turn = unwrap(v.h, target) - v.h;
+      v.h += turn * (1 - Math.exp(-dt * TURN_RATE));
+      if (Math.abs(turn) > 0.01) animating = true;
       v.model.group.position.set(p.x, 0, p.z);
-      v.model.group.rotation.y = p.h;
+      v.model.group.rotation.y = v.h;
       v.model.group.scale.setScalar(boost);
       v.model.group.visible = !v.state.dim || v.state.selected;
       v.ring.position.set(p.x, 0, p.z);

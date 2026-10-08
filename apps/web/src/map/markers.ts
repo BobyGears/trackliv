@@ -75,7 +75,17 @@ export function renderVehicleMarker(
     arrow.innerHTML = html;
     arrow.dataset.kind = v.moving ? 'a' : 'p';
   }
-  (arrow.firstElementChild as HTMLElement | null)?.style.setProperty('transform', v.moving ? `rotate(${v.heading}deg)` : '');
+  const svg = arrow.firstElementChild as HTMLElement | null;
+  if (svg && v.moving) {
+    // turn the short way round (350° → 10° is +20°, not −340°); CSS eases the change
+    const prev = Number(arrow.dataset.rot ?? v.heading);
+    const rot = prev + ((((v.heading - prev) % 360) + 540) % 360) - 180;
+    arrow.dataset.rot = String(rot);
+    svg.style.transform = `rotate(${rot}deg)`;
+  } else if (svg) {
+    delete arrow.dataset.rot;
+    svg.style.transform = '';
+  }
   const txt = chip.querySelector('.txt') as HTMLElement;
   const text = v.label ? `${v.callsign} <span style="font-family:var(--font-sans);font-weight:600;color:var(--muted)">${esc(v.status)}</span>` : v.callsign;
   if (txt.innerHTML !== text) txt.innerHTML = text;

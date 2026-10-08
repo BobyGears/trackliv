@@ -224,6 +224,14 @@ body {
   place-items: center;
   color: white;
 }
+.tl-vehicle .arrow svg {
+  transition: transform 0.8s cubic-bezier(0.33, 1, 0.68, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tl-vehicle .arrow svg {
+    transition: none;
+  }
+}
 .tl-vehicle.is-selected {
   box-shadow: 0 0 0 2px var(--primary), var(--shadow-lg);
 }
