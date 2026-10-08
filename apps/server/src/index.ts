@@ -96,7 +96,8 @@ app.use(express.json({ limit: '2mb' }));
 if (config.production) {
   const tileOrigin = (() => {
     try {
-      return new URL((process.env.VITE_STREET_TILES ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png').replace(/[{}]/g, '')).origin;
+      // street map tiles (OpenFreeMap by default) – see VITE_BASEMAP_URL
+      return new URL(process.env.VITE_BASEMAP_URL || 'https://tiles.openfreemap.org/planet').origin;
     } catch {
       return '';
     }

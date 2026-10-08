@@ -201,7 +201,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   eventsOpen: false,
   focus: null,
   mapPick: null,
-  layers: { routes: true, labels: true, buildings: true, crew: true, streets: false },
+  layers: { routes: true, labels: true, buildings: true, crew: true, streets: true },
   is3d: true,
   toasts: [],
   history: [],

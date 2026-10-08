@@ -11,8 +11,8 @@ COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 RUN npm ci --no-audit --no-fund
 COPY . .
-ARG VITE_STREET_TILES=
-ENV VITE_STREET_TILES=${VITE_STREET_TILES}
+ARG VITE_BASEMAP_URL=
+ENV VITE_BASEMAP_URL=${VITE_BASEMAP_URL}
 # A failing unit test or type error aborts the build – the running version keeps running.
 RUN npm test && npm run typecheck && npm run build
 

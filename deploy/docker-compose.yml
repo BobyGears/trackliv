@@ -14,7 +14,7 @@ services:
     build:
       context: ..
       args:
-        VITE_STREET_TILES: ${VITE_STREET_TILES:-}
+        VITE_BASEMAP_URL: ${VITE_BASEMAP_URL:-}
     image: trackliv:latest
     container_name: trackliv-app
     restart: unless-stopped

@@ -69,7 +69,7 @@ Changes go live on every open screen. To start without the demo data, run `TRACK
 
 It raises alerts when a crewed vehicle hasn't left 15 minutes after its planned time, or leaves without an assignment.
 
-Also: a command palette (`⌘K`), dark "ops" mode, and live multi-user updates over SSE (several dispatchers can work at once, with optimistic updates and conflict retry). There's also an optional *Street detail (online)* map layer: greyed OpenStreetMap tiles for zooming into project sites. You can point it at your own tile provider with `VITE_STREET_TILES`.
+Also: a command palette (`⌘K`), dark "ops" mode, and live multi-user updates over SSE (several dispatchers can work at once, with optimistic updates and conflict retry). The map shows all of Germany with street names (vector tiles from [OpenFreeMap](https://openfreemap.org), no API key; any OpenMapTiles-schema source can be set with `VITE_BASEMAP_URL`). Without internet it falls back to the built-in offline Rhein-Main map.
 
 | Key | Action |
 | --- | --- |

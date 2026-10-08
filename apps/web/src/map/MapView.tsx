@@ -24,7 +24,9 @@ import {
   siteMarkerEl,
   vehicleMarkerEl,
 } from './markers';
-import { REGION_BBOX, applyTheme, buildStyle } from './style';
+import { GERMANY_BOUNDS, OFFLINE_LAYERS, PALETTE, applyTheme, buildStyle, omtLayers } from './style';
+
+const OMT_LAYERS = omtLayers(PALETTE.light).map((l) => ({ id: l.id, label: l.type === 'symbol' }));
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
@@ -69,6 +71,8 @@ class MapController {
   private unsub: (() => void)[] = [];
   private raf = 0;
   private loaded = false;
+  private omtOk = false;
+  private omtFailed = false;
 
   constructor(el: HTMLDivElement) {
     const s = useStore.getState();
@@ -80,17 +84,27 @@ class MapController {
       pitch: 32,
       bearing: -6,
       maxPitch: 78,
-      minZoom: 7.6,
-      maxBounds: [
-        [REGION_BBOX[0] - 0.6, REGION_BBOX[1] - 0.4],
-        [REGION_BBOX[2] + 0.6, REGION_BBOX[3] + 0.4],
-      ],
+      minZoom: 5,
+      maxBounds: GERMANY_BOUNDS,
       maxZoom: 20.5,
       attributionControl: { compact: true, customAttribution: 'Geodata © OpenStreetMap contributors, Overture Maps Foundation, Hessen address register (DL-DE-ZERO-2.0)' },
       canvasContextAttributes: { antialias: true },
       fadeDuration: 120,
     });
     this.map.on('load', () => this.onLoad());
+    // Street map unreachable (offline, blocked)? Fall back to the built-in Rhein-Main map.
+    let omtErrors = 0;
+    this.map.on('sourcedata', (e) => {
+      if (e.sourceId === 'omt' && e.tile) this.omtOk = true;
+    });
+    this.map.on('error', (e) => {
+      if ((e as { sourceId?: string }).sourceId !== 'omt' || this.omtOk || this.omtFailed) return;
+      if (++omtErrors >= 3) {
+        this.omtFailed = true;
+        this.applyLayers(useStore.getState());
+        useStore.getState().toast({ kind: 'warning', title: 'Street map unavailable', detail: 'Showing the offline Rhein-Main map instead.' });
+      }
+    });
   }
 
   destroy() {
@@ -158,6 +172,7 @@ class MapController {
 
     this.hq = new HqLayer(s.siteGeo, s.theme);
     map.addLayer(this.hq, map.getLayer('hq-street-labels') ? 'hq-street-labels' : undefined);
+    this.applyLayers(useStore.getState());
 
     for (const site of s.siteGeo) {
       const el = siteMarkerEl();
@@ -232,9 +247,11 @@ class MapController {
     for (const id of ['tl-routes', 'tl-routes-casing', 'tl-routes-hit']) vis(id, st.layers.routes);
     vis('hq-buildings', st.layers.buildings);
     vis(this.hq!.id, st.layers.buildings);
-    vis('places-towns', st.layers.labels);
-    vis('hq-street-labels', st.layers.labels);
-    vis('streets-raster', st.layers.streets);
+    const online = st.layers.streets && !this.omtFailed;
+    for (const l of OMT_LAYERS) vis(l.id, online && (!l.label || st.layers.labels));
+    for (const id of OFFLINE_LAYERS) vis(id, !online);
+    vis('places-towns', st.layers.labels && !online);
+    vis('hq-street-labels', st.layers.labels && !online);
     this.syncAll();
   }
 

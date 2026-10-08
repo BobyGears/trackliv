@@ -36,6 +36,8 @@ HQ_BBOXES = [
 ]
 # Rhein-Main region where projects are.
 REGION_BBOX = (7.95, 49.75, 9.05, 50.35)
+# Germany: only the roads long trips use, for routes/ETAs to projects outside Rhein-Main.
+DE_BBOX = (5.86, 47.27, 15.05, 55.06)
 
 
 def _s3():
@@ -86,33 +88,38 @@ def row_groups_hitting(path, bbox):
     return path, hits
 
 
-def query(theme, typ, bbox, columns=None):
+def query(theme, typ, bbox, columns=None, where=None):
+    """where: optional (column, allowed values) – applied while reading, so large areas fit in memory."""
     xmin, ymin, xmax, ymax = bbox
     with cf.ThreadPoolExecutor(8) as ex:
         res = list(ex.map(lambda p: row_groups_hitting(p, bbox), files(theme, typ)))
     tables = []
-    for path, hits in res:
-        if not hits:
-            continue
+    todo = [(path, hits[i:i + 4]) for path, hits in res for i in range(0, len(hits), 4)]
+    for n, (path, chunk) in enumerate(todo):
 
         def read():
             with S3.open_input_file(path) as f:
-                return pq.ParquetFile(f).read_row_groups(hits, columns=columns)
+                return pq.ParquetFile(f).read_row_groups(chunk, columns=columns)
 
         t = retry(read)
         bb = t.column('bbox').to_pylist()
         mask = [b['xmin'] <= xmax and b['xmax'] >= xmin and b['ymin'] <= ymax and b['ymax'] >= ymin for b in bb]
+        if where:
+            col, allowed = where
+            mask = [m and v in allowed for m, v in zip(mask, t.column(col).to_pylist())]
         t = t.filter(pa.array(mask))
         if t.num_rows:
             tables.append(t)
+        if len(todo) > 20 and n % 10 == 0:
+            print(f'  {typ}: {n + 1}/{len(todo)} chunks, {sum(x.num_rows for x in tables)} rows', file=sys.stderr)
     return pa.concat_tables(tables, promote_options='default') if tables else None
 
 
-def dump(name, theme, typ, bboxes, columns=None, keep=lambda r: True):
+def dump(name, theme, typ, bboxes, columns=None, keep=lambda r: True, where=None):
     """bboxes: one bbox or a list of them (features in several are kept once)."""
     rows, seen = [], set()
     for bbox in (bboxes if isinstance(bboxes, list) else [bboxes]):
-        t = query(theme, typ, bbox, columns=(columns + ['geometry', 'bbox']) if columns else None)
+        t = query(theme, typ, bbox, columns=(columns + ['geometry', 'bbox']) if columns else None, where=where)
         for r in (t.to_pylist() if t is not None else []):
             if r.get('id') in seen:
                 continue
@@ -131,6 +138,8 @@ def dump(name, theme, typ, bboxes, columns=None, keep=lambda r: True):
     print(f'{name}: {len(feats)} features', file=sys.stderr)
 
 
+DE_ROAD_CLASSES = {'motorway', 'trunk', 'primary', 'motorway_link', 'trunk_link', 'primary_link'}
+
 REGION_ROAD_CLASSES = {
     'motorway', 'trunk', 'primary', 'secondary', 'tertiary',
     'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link', 'standard_gauge',
@@ -148,6 +157,8 @@ JOBS = {
     'region_roads': lambda: dump('region_roads', 'transportation', 'segment', REGION_BBOX,
                                  ['id', 'names', 'subtype', 'class', 'connectors', 'road_flags'],
                                  lambda r: r['class'] in REGION_ROAD_CLASSES),
+    'de_roads': lambda: dump('de_roads', 'transportation', 'segment', DE_BBOX,
+                             ['id', 'subtype', 'class', 'connectors'], where=('class', DE_ROAD_CLASSES)),
     'region_water': lambda: dump('region_water', 'base', 'water', REGION_BBOX,
                                  ['id', 'names', 'subtype', 'class'],
                                  lambda r: r['subtype'] in ('river', 'lake', 'reservoir', 'canal', 'water', 'pond')),

@@ -55,7 +55,7 @@ export function MapControls() {
           <Toggle on={layers.buildings} onChange={() => st().toggleLayer('buildings')} label="3D buildings" hint="True-scale HQs and surroundings" />
           <Toggle on={layers.crew} onChange={() => st().toggleLayer('crew')} label="Crew figures" hint="People next to their vehicle" />
           <Toggle on={layers.labels} onChange={() => st().toggleLayer('labels')} label="Place & street labels" />
-          <Toggle on={layers.streets} onChange={() => st().toggleLayer('streets')} label="Street detail (online)" hint="OpenStreetMap tiles for zooming into project sites" />
+          <Toggle on={layers.streets} onChange={() => st().toggleLayer('streets')} label="Street map of Germany (online)" hint="OpenFreeMap · off: offline Rhein-Main map" />
         </Panel>
       )}
     </div>

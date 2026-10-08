@@ -62,7 +62,7 @@ function SiteSwitcher() {
           <Warehouse size={13} />
         </span>
         <span className="leading-tight">
-          <span className="block max-w-40 truncate text-[12px] font-semibold">{current ? current.name : 'All projects · Rhein-Main'}</span>
+          <span className="block max-w-40 truncate text-[12px] font-semibold">{current ? current.name : 'All projects · Germany'}</span>
           <span className="block text-[10.5px] text-muted">
             {current ? `${inYard(current.id)} in yard · ${current.code}` : `${inYard()}/${vehicles.length} vehicles in yard`}
           </span>
@@ -77,7 +77,7 @@ function SiteSwitcher() {
             </span>
             <span>
               <span className="block font-semibold">Overview · all projects</span>
-              <span className="block text-[11px] text-muted">Rhein-Main region</span>
+              <span className="block text-[11px] text-muted">Fits every project on the map</span>
             </span>
           </button>
           {sites.map((s) => (
