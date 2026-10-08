@@ -129,7 +129,7 @@ export function ScheduleView() {
               return (
                 <div key={v.id} className={cx('grid grid-cols-[230px_1fr] border-b border-line', sel && 'bg-primary-weak/60')}>
                   <button onClick={() => select({ type: 'vehicle', id: v.id })} className="flex min-w-0 items-center gap-2 px-4 py-2 text-left hover:bg-panel-3">
-                    <span className="mono w-10 text-[12px] font-bold">{v.callsign}</span>
+                    <span className="mono w-14 shrink-0 whitespace-nowrap text-[12px] font-bold">{v.callsign}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[12px] font-semibold">{a?.crew.length ? destinationLabel(a.destination, projects) : v.status === 'active' ? 'Unassigned' : v.status}</span>
                       <span className="block">{crew.length ? <AvatarStack people={crew} size={16} max={4} /> : <span className="text-[10.5px] text-subtle">no crew</span>}</span>

@@ -1,7 +1,7 @@
 import { STAGE_LABEL, fullName, isAtDepot, type OpsEvent } from '@trackliv/core';
 import { AlertTriangle, CheckCircle2, ChevronRight, Info, OctagonAlert, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { runInfo, useOpsNow } from '../lib/derived';
+import { runInfo, useOpsNow, vehicleDesc } from '../lib/derived';
 import { PRIORITY_TONE, STAGE_TONE, fmtDuration, fmtTime } from '../lib/format';
 import { useStore } from '../lib/store';
 import { Avatar, AvatarStack, Panel, Pill, cx } from './kit';
@@ -72,7 +72,7 @@ export function OpsTable() {
                   <span className="min-w-0">
                     <span className="block truncate text-[12px] font-medium">{info.assignment?.crew.length ? info.destLabel : v.status === 'active' ? 'Unassigned' : `In ${v.status}`}</span>
                     <span className="block truncate text-[10.5px] text-muted">
-                      {v.make} {v.model}
+                      {vehicleDesc(v)}
                       {t && !isAtDepot(t, sites) && t.speedKmh > 2 ? ` · ${t.speedKmh} km/h` : ''}
                     </span>
                   </span>
@@ -105,7 +105,7 @@ export function OpsTable() {
                     <Pill tone="warning">{p.status}</Pill>
                   ) : v && a ? (
                     <span className="text-right text-[11px]">
-                      <span className="mono block font-semibold">{v.callsign}</span>
+                      <span className="mono block whitespace-nowrap font-semibold">{v.callsign}</span>
                       <span className="block text-muted">{STAGE_LABEL[a.stage]}</span>
                     </span>
                   ) : (

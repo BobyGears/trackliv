@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../lib/store';
 import { Kbd, cx } from './kit';
+import { vehicleDesc } from '../lib/derived';
 
 interface Item {
   id: string;
@@ -72,7 +73,7 @@ export function CommandPalette() {
     return [
       ...actions,
       ...sites.map((s) => ({ id: `s-${s.id}`, group: 'HQs', icon: <Warehouse size={15} />, title: `${s.name} (3D)`, sub: s.address, keywords: `${s.code} ${s.name} ${s.address} hq depot lager`, run: goObj('site', s.id) })),
-      ...vehicles.map((v) => ({ id: `v-${v.id}`, group: 'Vehicles', icon: <Truck size={15} />, title: `${v.callsign} · ${v.plate}`, sub: `${v.make} ${v.model}`, keywords: `${v.callsign} ${v.plate} ${v.make} ${v.model} ${v.kind}`, run: goObj('vehicle', v.id) })),
+      ...vehicles.map((v) => ({ id: `v-${v.id}`, group: 'Vehicles', icon: <Truck size={15} />, title: `${v.callsign} · ${v.plate}`, sub: vehicleDesc(v), keywords: `${v.callsign} ${v.plate} ${v.make} ${v.model} ${v.kind}`, run: goObj('vehicle', v.id) })),
       ...people.map((p) => ({ id: `p-${p.id}`, group: 'Crew', icon: <UserRound size={15} />, title: fullName(p), sub: `${p.role}${p.status !== 'available' ? ` · ${p.status}` : ''}`, keywords: `${p.firstName} ${p.lastName} ${p.role} ${p.licenses.join(' ')}`, run: goObj('person', p.id) })),
       ...projects.map((p) => ({ id: `j-${p.id}`, group: 'Projects', icon: <Building2 size={15} />, title: p.name, sub: `${p.code} · ${p.address}`, keywords: `${p.name} ${p.code} ${p.client} ${p.address}`, run: goObj('project', p.id) })),
     ];

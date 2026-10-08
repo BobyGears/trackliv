@@ -2,6 +2,7 @@ import { Loader2, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useStore } from '../lib/store';
 import { Panel } from './kit';
+import { DteLogo } from './DteLogo';
 
 export function LoginScreen() {
   const login = useStore((s) => s.login);
@@ -43,8 +44,9 @@ export function LoginScreen() {
           </div>
           <div className="leading-tight">
             <div className="text-[18px] font-bold tracking-tight">TrackLiv</div>
-            <div className="text-[11.5px] text-muted">DTE GmbH · Dispatch</div>
+            <div className="text-[11.5px] text-muted">Dispatch</div>
           </div>
+          <DteLogo className="ml-auto h-11 w-auto" />
         </div>
         <form onSubmit={submit} className="mt-6 space-y-3">
           <label className="block">

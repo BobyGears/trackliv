@@ -142,3 +142,6 @@ export const vehicleKindLabel: Record<Vehicle['kind'], string> = {
   pickup: 'Pickup',
   car: 'Car',
 };
+
+/** "Mercedes-Benz Sprinter" – or the vehicle type while make/model are not entered yet. */
+export const vehicleDesc = (v: Pick<Vehicle, 'make' | 'model' | 'kind'>) => `${v.make} ${v.model}`.trim() || vehicleKindLabel[v.kind];

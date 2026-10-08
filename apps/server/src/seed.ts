@@ -1,71 +1,57 @@
-// Demo master data so TrackLiv is usable before real data is entered.
-// Project locations are real street segments in Rhein-Main (no house numbers); clients and names are fictional.
+// Starting data: DTE's vehicles and drivers as listed in FleetGO (plates match FleetGO, so live data
+// links up by licence plate). Make/model, seats and home depot are placeholders – edit them in Data.
+// The projects below are examples on real Rhein-Main streets (no house numbers); names and clients are fictional.
 import type { Person, Project, Vehicle } from '@trackliv/core';
 
 const SCH = 'hq-schieferstein';
 const HAF = 'hq-hafen';
+const BIS = 'hq-bischofsheim';
 
-export const demoVehicles: Vehicle[] = [
-  { id: 'veh-01', callsign: 'T-01', plate: 'MTK-DT 101', make: 'Mercedes-Benz', model: 'Sprinter 317 CDI', kind: 'van', seats: 4, requiredLicense: 'B', homeSiteId: SCH, status: 'active' },
-  { id: 'veh-02', callsign: 'T-02', plate: 'MTK-DT 102', make: 'Mercedes-Benz', model: 'Sprinter 317 CDI', kind: 'van', seats: 4, requiredLicense: 'B', homeSiteId: SCH, status: 'active' },
-  { id: 'veh-03', callsign: 'T-03', plate: 'MTK-DT 103', make: 'Volkswagen', model: 'Crafter 35 TDI', kind: 'van', seats: 4, requiredLicense: 'B', homeSiteId: SCH, status: 'active' },
-  { id: 'veh-04', callsign: 'T-04', plate: 'MTK-DT 104', make: 'Volkswagen', model: 'Crafter 35 TDI', kind: 'van', seats: 4, requiredLicense: 'B', homeSiteId: SCH, status: 'active' },
-  { id: 'veh-05', callsign: 'T-05', plate: 'MTK-DT 105', make: 'Ford', model: 'Transit Custom', kind: 'van', seats: 3, requiredLicense: 'B', homeSiteId: SCH, status: 'active' },
-  { id: 'veh-06', callsign: 'T-06', plate: 'MTK-DT 106', make: 'MAN', model: 'TGL 8.190 Koffer', kind: 'truck', seats: 3, requiredLicense: 'C1', homeSiteId: SCH, status: 'active' },
-  { id: 'veh-07', callsign: 'T-07', plate: 'MTK-DT 107', make: 'Volkswagen', model: 'Amarok', kind: 'pickup', seats: 4, requiredLicense: 'B', homeSiteId: SCH, status: 'maintenance' },
-  { id: 'veh-08', callsign: 'T-08', plate: 'MTK-DT 108', make: 'Mercedes-Benz', model: 'Sprinter 317 CDI', kind: 'van', seats: 4, requiredLicense: 'B', homeSiteId: HAF, status: 'active' },
-  { id: 'veh-09', callsign: 'T-09', plate: 'MTK-DT 109', make: 'Renault', model: 'Master L3H2', kind: 'van', seats: 3, requiredLicense: 'B', homeSiteId: HAF, status: 'active' },
-  { id: 'veh-10', callsign: 'T-10', plate: 'MTK-DT 110', make: 'Ford', model: 'Transit 350', kind: 'van', seats: 4, requiredLicense: 'B', homeSiteId: HAF, status: 'active' },
-  { id: 'veh-11', callsign: 'T-11', plate: 'MTK-DT 111', make: 'Iveco', model: 'Daily 70C18', kind: 'truck', seats: 3, requiredLicense: 'C1', homeSiteId: HAF, status: 'active' },
-  { id: 'veh-12', callsign: 'T-12', plate: 'MTK-DT 112', make: 'Mercedes-Benz', model: 'Atego 1224', kind: 'truck', seats: 3, requiredLicense: 'C', homeSiteId: HAF, status: 'active' },
-  { id: 'veh-13', callsign: 'T-13', plate: 'MTK-DT 113', make: 'Toyota', model: 'Hilux Double Cab', kind: 'pickup', seats: 4, requiredLicense: 'B', homeSiteId: HAF, status: 'active' },
+// [plate, home depot, regular driver in FleetGO]
+const fleet: [string, string, string?][] = [
+  ['MTK TE 800', SCH, 'Asen Yanakiev'],
+  ['MTK TE 300', SCH, 'Armando'],
+  ['MTK TE 710', SCH, 'Bayar Emre'],
+  ['MTK TE 700', SCH],
+  ['MTK-NB 678', SCH],
+  ['MTK TE 810', HAF, 'Mustafa Sevik'],
+  ['MTK TE 830', HAF, 'Balon SUB'],
+  ['MTK-TE 322', HAF, 'Ermal'],
+  ['MTK-TE 850', HAF, 'Harun Bayar'],
+  ['MTK-TE 320', BIS],
+  ['MTK-TE 860', BIS],
+  ['MTK-TE 840', BIS, 'Eric Schulze'],
+  ['MTK-TE 903', BIS],
 ];
 
-type P = [string, string, Person['role'], Person['licenses'], string, Person['status']?];
-const roster: P[] = [
-  ['Jonas', 'Weber', 'Foreman', ['B', 'C1'], SCH],
-  ['Mehmet', 'Yılmaz', 'Driver', ['B', 'CE'], SCH],
-  ['Lukas', 'Schneider', 'Technician', ['B'], SCH],
-  ['Piotr', 'Nowak', 'Operative', ['B'], SCH],
-  ['Stefan', 'Becker', 'Foreman', ['B', 'BE'], SCH],
-  ['Daniel', 'Hoffmann', 'Technician', [], SCH],
-  ['Ali', 'Demir', 'Operative', ['B'], SCH],
-  ['Tobias', 'Fischer', 'Technician', ['B'], SCH],
-  ['Marco', 'Rossi', 'Operative', [], SCH],
-  ['Sven', 'Wagner', 'Driver', ['B', 'C'], SCH],
-  ['Kevin', 'Braun', 'Apprentice', [], SCH],
-  ['Emre', 'Arslan', 'Operative', ['B'], SCH],
-  ['Dennis', 'Wolf', 'Technician', ['B'], SCH, 'sick'],
-  ['Florian', 'Koch', 'Operative', [], SCH],
-  ['Nikola', 'Petrović', 'Operative', ['B'], SCH],
-  ['Michael', 'Richter', 'Foreman', ['B'], SCH, 'vacation'],
-  ['Patrick', 'Klein', 'Apprentice', [], SCH],
-  ['Can', 'Öztürk', 'Technician', ['B'], HAF],
-  ['Sebastian', 'Neumann', 'Foreman', ['B', 'C1E'], HAF],
-  ['Ivan', 'Horvat', 'Operative', [], HAF],
-  ['Thomas', 'Krüger', 'Driver', ['B', 'C'], HAF],
-  ['Alexander', 'Lange', 'Technician', ['B'], HAF],
-  ['Burak', 'Çelik', 'Operative', ['B'], HAF],
-  ['Marcel', 'Zimmermann', 'Operative', [], HAF],
-  ['Dominik', 'Hartmann', 'Technician', ['B'], HAF, 'training'],
-  ['Luca', 'Bianchi', 'Operative', ['B'], HAF],
-  ['Benjamin', 'Schmitt', 'Apprentice', [], HAF],
-  ['Yusuf', 'Aydın', 'Operative', ['B'], HAF],
-  ['Jan', 'Werner', 'Technician', ['B'], HAF],
-  ['Felix', 'Krause', 'Operative', [], HAF],
-  ['Kai', 'Schäfer', 'Driver', ['B', 'C1'], HAF],
-  ['Robert', 'Maier', 'Operative', [], HAF],
-];
-
-export const demoPeople: Person[] = roster.map(([firstName, lastName, role, licenses, homeSiteId, status], i) => ({
-  id: `p-${String(i + 1).padStart(2, '0')}`,
-  firstName,
-  lastName,
-  role,
-  licenses,
+export const demoVehicles: Vehicle[] = fleet.map(([plate, homeSiteId], i) => ({
+  id: `veh-${String(i + 1).padStart(2, '0')}`,
+  // call sign = the plate without the district, e.g. "TE 800"
+  callsign: plate.replace(/^MTK[\s-]*/, '').replace('-', ' '),
+  plate,
+  make: '',
+  model: '',
+  kind: 'van',
+  seats: 4,
+  requiredLicense: 'B',
   homeSiteId,
-  status: status ?? 'available',
+  status: 'active',
 }));
+
+export const demoPeople: Person[] = fleet
+  .filter((f): f is [string, string, string] => !!f[2])
+  .map(([, homeSiteId, name], i) => {
+    const [firstName, ...rest] = name.split(' ');
+    return {
+      id: `p-${String(i + 1).padStart(2, '0')}`,
+      firstName,
+      lastName: rest.join(' '),
+      role: 'Driver',
+      licenses: ['B'],
+      homeSiteId,
+      status: 'available',
+    };
+  });
 
 const project = (
   n: number,

@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import type { Person } from '@trackliv/core';
-import { initials } from '@trackliv/core';
+import { fullName, initials } from '@trackliv/core';
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { Tone } from '../lib/format';
 
@@ -109,7 +109,7 @@ export function Avatar({ person, size = 24, ring }: { person: Person; size?: num
         boxShadow: ring ? `0 0 0 2px var(--panel-solid), 0 0 0 3.5px ${ring}` : '0 0 0 2px var(--panel-solid)',
         opacity: person.status === 'available' ? 1 : 0.55,
       }}
-      title={`${person.firstName} ${person.lastName}`}
+      title={fullName(person)}
     >
       {initials(person)}
     </span>

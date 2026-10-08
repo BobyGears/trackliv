@@ -355,9 +355,10 @@ export function validatePlan(list: readonly Assignment[], ctx: PlanContext): Pla
 }
 
 export function fullName(p: Person): string {
-  return `${p.firstName} ${p.lastName}`;
+  return `${p.firstName} ${p.lastName}`.trim();
 }
 
+/** "AY" for Asen Yanakiev; the first two letters for a single name ("AR" for Armando). */
 export function initials(p: Person): string {
-  return `${p.firstName[0] ?? ''}${p.lastName[0] ?? ''}`.toUpperCase();
+  return (p.lastName.trim() ? `${p.firstName[0] ?? ''}${p.lastName.trim()[0]}` : p.firstName.slice(0, 2)).toUpperCase();
 }

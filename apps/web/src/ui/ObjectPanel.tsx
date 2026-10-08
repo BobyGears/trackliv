@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
-import { runInfo, useOpsNow, vehicleKindLabel } from '../lib/derived';
+import { runInfo, useOpsNow, vehicleKindLabel, vehicleDesc } from '../lib/derived';
 import { PRIORITY_TONE, STAGE_TONE, fmtAgo, fmtDuration, fmtTime } from '../lib/format';
 import { useStore, type Selection } from '../lib/store';
 import { DestinationPicker } from './DestinationPicker';
@@ -123,7 +123,7 @@ function VehiclePanel({ id }: { id: ID }) {
   return (
     <>
       <Header
-        kicker={`Vehicle · ${vehicleKindLabel[v.kind]} · ${v.make} ${v.model}`}
+        kicker={`Vehicle · ${vehicleKindLabel[v.kind]}${v.make || v.model ? ` · ${vehicleDesc(v)}` : ''}`}
         title={
           <span className="flex items-center gap-2">
             {v.callsign}
@@ -733,7 +733,7 @@ function SitePanel({ id }: { id: ID }) {
               const info = runInfo(v.id, now);
               return (
                 <Linked key={v.id} onClick={() => select({ type: 'vehicle', id: v.id }, { focus: true })}>
-                  <span className="mono w-11 font-semibold">{v.callsign}</span>
+                  <span className="mono w-14 shrink-0 whitespace-nowrap font-semibold">{v.callsign}</span>
                   <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{info?.assignment?.crew.length ? info.destLabel : v.status === 'active' ? 'Unassigned' : v.status}</span>
                   {info && <Pill tone={STAGE_TONE[info.stage]}>{info.stageLabel}</Pill>}
                 </Linked>

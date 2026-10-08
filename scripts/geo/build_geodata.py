@@ -26,7 +26,11 @@ HERE = os.path.dirname(__file__)
 CACHE = os.path.join(HERE, '.cache')
 OUT = os.path.join(HERE, '..', '..', 'data', 'geo')
 
-HQ_BBOX = (8.4035, 49.9975, 8.4235, 50.0120)
+# keep in sync with fetch_overture.py
+HQ_BBOXES = [
+    (8.4035, 49.9975, 8.4235, 50.0120),
+    (8.3760, 49.9672, 8.3960, 49.9812),
+]
 SITE_HEIGHT = {}
 
 SITES = [
@@ -47,6 +51,17 @@ SITES = [
         'number': '18',
         'address': 'Hafenstraße 18, 65439 Flörsheim am Main',
         'color': '#00a3a3',
+    },
+    {
+        'id': 'hq-bischofsheim',
+        'code': 'HQ-BIS',
+        'name': 'Lager Bischofsheim',
+        'street': 'Neben dem Mühlweg',
+        'number': '20',
+        'address': 'Neben dem Mühlweg 20-30, 65474 Bischofsheim',
+        'color': '#7c5cff',
+        # OSM/Nominatim point of no. 20, used if the address register has no entry for it
+        'point': (8.3858971, 49.9741381),
     },
 ]
 
@@ -225,11 +240,15 @@ def build_region():
 # HQ surroundings (full detail)
 # =============================================================================================
 def build_hq():
-    clip = box(*HQ_BBOX)
+    clip = unary_union([box(*b) for b in HQ_BBOXES])
     addresses = [props(f) | {'_g': f['geometry']} for f in load('hq_address')]
     site_points = {}
     for s in SITES:
         hit = [a for a in addresses if a.get('street') == s['street'] and str(a.get('number')) == s['number']]
+        if not hit and s.get('point'):
+            print(f"{s['id']}: address not in the register, using the fixed point", file=sys.stderr)
+            site_points[s['id']] = s['point']
+            continue
         if not hit:
             sys.exit(f"address not found: {s['address']}")
         site_points[s['id']] = tuple(hit[0]['_g']['coordinates'])
@@ -410,7 +429,8 @@ def build_sites(site_points, site_buildings, raw_buildings, roads):
             'address': s['address'],
             'color': s['color'],
             'location': {'lng': round(pt[0], 7), 'lat': round(pt[1], 7)},
-            'geofenceRadiusM': 110,
+            # big sites: the yard must lie inside the geofence, or parked vehicles count as "away"
+            'geofenceRadiusM': max(110, math.ceil(max([math.hypot(x, y) for x, y, _ in yard] + [0]) + 30)),
             'heightM': SITE_HEIGHT.get(s['id']),
             'footprint': ring,
             'yard': [

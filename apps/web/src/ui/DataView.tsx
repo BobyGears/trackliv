@@ -17,6 +17,7 @@ import { api } from '../lib/api';
 import { PRIORITY_TONE } from '../lib/format';
 import { useStore } from '../lib/store';
 import { Avatar, Button, LicenseChips, Panel, Pill, Segmented, cx } from './kit';
+import { vehicleDesc } from '../lib/derived';
 
 type Tab = 'projects' | 'people' | 'vehicles';
 
@@ -81,10 +82,10 @@ export function DataView() {
         id: v.id,
         node: (
           <>
-            <span className="mono w-11 font-bold">{v.callsign}</span>
+            <span className="mono w-14 shrink-0 whitespace-nowrap font-bold">{v.callsign}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">
-                {v.make} {v.model}
+                {vehicleDesc(v)}
               </span>
               <span className="block truncate text-[11px] text-muted">
                 <span className="mono">{v.plate}</span> · {v.seats} seats · {v.requiredLicense} · {sites.find((s) => s.id === v.homeSiteId)?.code}
@@ -422,7 +423,7 @@ function VehicleForm({ vehicle, onDone }: { vehicle?: Vehicle; onDone: (id: stri
   return (
     <FormShell
       title={vehicle ? `${vehicle.callsign} · ${vehicle.plate}` : 'New vehicle'}
-      sub={vehicle ? `${vehicle.make} ${vehicle.model}` : 'Or let FleetGO import it automatically'}
+      sub={vehicle ? vehicleDesc(vehicle) : 'Or let FleetGO import it automatically'}
       saving={saving}
       canSave={!!(d.callsign?.trim() || d.plate?.trim())}
       onSave={() => save(d)}

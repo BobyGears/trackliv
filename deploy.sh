@@ -8,6 +8,7 @@
 #   ./deploy.sh --status    container status, health and the last log lines
 #   ./deploy.sh --logs      follow the server log (Ctrl+C to stop)
 #   ./deploy.sh --fleetgo-check   sign in to FleetGO once and show what TrackLiv sees (no secrets shown)
+#   ./deploy.sh --reset-data      deploy and start over with the starting data (old data kept as a backup)
 #
 # Runs next to Registra Atlas on the same server: TrackLiv is one container
 # (trackliv-app) in the docker network "atlas-edge"; the Caddy that already
@@ -89,8 +90,13 @@ case "$MODE" in
   --fleetgo-check)
     "${SSH[@]}" "${SERVER}" "docker exec trackliv-app node --import tsx apps/server/src/fleetgo-check.ts" || true
     exit 0 ;;
+  --reset-data)
+    echo "This replaces ALL TrackLiv data on the server (people, vehicles, projects, plans, log) with the"
+    echo "starting data. The current data is kept in ${DEST}/data/backups/."
+    read -r -p "Type 'reset' to continue: " CONFIRM
+    [[ "$CONFIRM" == "reset" ]] || { echo "Cancelled – nothing changed."; exit 1; } ;;
   ""|--no-build) ;;
-  *) echo "Unknown option ${MODE} (use --dry-run, --no-build, --status, --logs or --fleetgo-check)"; exit 1 ;;
+  *) echo "Unknown option ${MODE} (use --dry-run, --no-build, --status, --logs, --fleetgo-check or --reset-data)"; exit 1 ;;
 esac
 echo "▶ Deploying TrackLiv ${VERSION:-dev} to ${SERVER} → https://${DOMAIN}"
 
@@ -139,6 +145,11 @@ echo "── 3/6 Server settings (${DEST}/.env)"
 STEP="4/6 backup"
 echo "── 4/6 Backup of the current data"
 "${SSH[@]}" "${SERVER}" "cd ${DEST}/data && if [ -f db.json ]; then cp db.json backups/predeploy-\$(date +%Y%m%d-%H%M%S).json && ls -1t backups/predeploy-*.json | tail -n +21 | xargs -r rm -f && echo '   saved data/backups/predeploy-…json'; else echo '   nothing yet (first deploy)'; fi"
+
+if [[ "$MODE" == "--reset-data" ]]; then
+  STEP="4/6 reset of the data"
+  "${SSH[@]}" "${SERVER}" "docker stop trackliv-app >/dev/null 2>&1 || true; cd ${DEST}/data && if [ -f db.json ]; then mv db.json backups/reset-\$(date +%Y%m%d-%H%M%S).json && echo '   old data moved to data/backups/reset-…json – starting fresh'; fi"
+fi
 
 STEP="5/6 docker compose build + start"
 if [[ "$MODE" == "--no-build" ]]; then

@@ -61,6 +61,7 @@ import { TimeInput } from './ObjectPanel';
 import { DateNav } from './DateNav';
 import { RandomizePanel } from './RandomizePanel';
 import { Avatar, Button, IconButton, LicenseChips, Panel, Pill, Segmented, cx } from './kit';
+import { vehicleDesc } from '../lib/derived';
 
 type RosterFilter = 'all' | 'unassigned' | 'assigned' | 'off';
 
@@ -418,7 +419,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
             <span className="mono text-[10.5px] text-muted">{vehicle.plate}</span>
           </span>
           <span className="block truncate text-[10.5px] text-muted">
-            {vehicle.make} {vehicle.model} · {vehicle.requiredLicense}
+            {vehicleDesc(vehicle)} · {vehicle.requiredLicense}
           </span>
         </button>
         {inactive ? (

@@ -5,6 +5,7 @@ import { useOpsNow } from '../lib/derived';
 import { fmtAgo, fmtDate, fmtTimeSec } from '../lib/format';
 import { useStore, type View } from '../lib/store';
 import { cx, IconButton, Kbd, Panel, Segmented } from './kit';
+import { DteLogo } from './DteLogo';
 
 function Logo() {
   return (
@@ -18,8 +19,10 @@ function Logo() {
       </div>
       <div className="whitespace-nowrap leading-tight">
         <div className="text-[15px] font-bold tracking-tight">TrackLiv</div>
-        <div className="text-[10px] font-medium text-muted">DTE GmbH · Dispatch</div>
+        <div className="text-[10px] font-medium text-muted">Dispatch</div>
       </div>
+      <div className="ml-1 hidden h-7 w-px bg-line xl:block" />
+      <DteLogo tagline={false} className="ml-1 hidden h-[22px] w-auto xl:block" />
     </div>
   );
 }

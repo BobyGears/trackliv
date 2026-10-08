@@ -2,7 +2,7 @@
 
 Live crew & vehicle dispatch and schedule tracking for **DTE GmbH**, Flörsheim am Main.
 
-TrackLiv shows every project in the Rhein-Main region on one map. Both HQs, **Schieferstein 4** and **Hafenstraße 18**, are rebuilt in 3D at true scale from their real building footprints. Vehicles come in live from **FleetGO**. Each vehicle gets a crew of 1–4 people and a destination: a project from the list, or a custom place. A **Randomize** button builds the day's plan for you, and anything you've pinned stays where it is.
+TrackLiv shows every project in the Rhein-Main region on one map. All three depots, **Schieferstein 4** and **Hafenstraße 18** in Flörsheim and **Neben dem Mühlweg 20–30** in Bischofsheim, are rebuilt in 3D at true scale from their real building footprints. Vehicles come in live from **FleetGO**. Each vehicle gets a crew of 1–4 people and a destination: a project from the list, or a custom place. A **Randomize** button builds the day's plan for you, and anything you've pinned stays where it is.
 
 ![Overview](docs/screenshots/overview.jpg)
 
@@ -116,7 +116,11 @@ Tips:
 
 ## Data
 
-- **Master data, plans and the audit log** live in `apps/server/var/db.json` (on the server: `/opt/trackliv/data/db.json`). On first start, `TRACKLIV_SEED=demo` fills it with demo crew, vehicles and projects. The demo project locations are real Rhein-Main streets (no house numbers); the names and clients are fictional. To start from scratch, delete the file or set `TRACKLIV_SEED=empty`.
+- **Master data, plans and the audit log** live in `apps/server/var/db.json` (on the server: `/opt/trackliv/data/db.json`).
+- On first start, `TRACKLIV_SEED=demo` fills it with starting data:
+  - DTE's 13 vehicles and 8 drivers, as listed in FleetGO. The plates match FleetGO, so live data links up by number plate. Make/model, seats and home depot are placeholders to edit in **Data**.
+  - Example projects on real Rhein-Main streets (no house numbers). The project names and clients are fictional.
+- To start over with the starting data on the server, run `./deploy.sh --reset-data` (the old data is kept in `data/backups/`). `TRACKLIV_SEED=empty` starts with no data at all.
 - **Geodata** (`data/geo/`) is generated from [Overture Maps](https://overturemaps.org) (release 2026-09-23):
   - `hq-*.geojson`: every building with height, streets, rail, yards and water within about 1 km of both HQs.
   - `region-*.geojson`: an offline Rhein-Main basemap (towns, motorways, primary and secondary roads, rail, rivers, forest and urban areas). No tile server or API key is needed.

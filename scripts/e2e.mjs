@@ -133,16 +133,18 @@ try {
   await page.getByText('Tomorrow ·').waitFor();
   check('switch to tomorrow’s plan', true);
 
-  // Drag a person onto T-02
+  // Drag a person onto the second vehicle
+  const V2 = boot.vehicles[1].callsign;
+  const V3 = boot.vehicles[2].callsign;
   const p1 = boot.people.find((p) => p.licenses.includes('B') && p.status === 'available');
-  await drag(page, page.getByTestId(`drag-${p1.id}`), page.getByTestId('vehicle-card-T-02'));
+  await drag(page, page.getByTestId(`drag-${p1.id}`), page.getByTestId(`vehicle-card-${V2}`));
   await sleep(800);
   let plan = await api(`/api/plans/${tomorrow}`);
-  const t02 = vehicle('T-02');
-  check('drag & drop assigns a person to a vehicle', plan.assignments.find((a) => a.vehicleId === t02.id)?.crew.includes(p1.id), `${p1.firstName} → T-02`);
+  const t02 = vehicle(V2);
+  check('drag & drop assigns a person to a vehicle', plan.assignments.find((a) => a.vehicleId === t02.id)?.crew.includes(p1.id), `${p1.firstName} → ${V2}`);
 
   // Destination picker → project list
-  await page.getByTestId('dest-T-02').click();
+  await page.getByTestId(`dest-${V2}`).click();
   await page.getByPlaceholder(/Search projects/).fill('Eschborn');
   await page.keyboard.press('Enter');
   await sleep(800);
@@ -151,7 +153,7 @@ try {
   check('destination picker sets a project', plan.assignments.find((a) => a.vehicleId === t02.id)?.destination?.projectId === eschborn.id);
 
   // Custom destination (label)
-  await page.getByTestId('dest-T-02').click();
+  await page.getByTestId(`dest-${V2}`).click();
   await page.getByPlaceholder(/Search projects/).fill('Lager Rüsselsheim Notfall');
   await page.getByText('Use “Lager Rüsselsheim Notfall”').click();
   await sleep(800);
@@ -243,7 +245,7 @@ try {
 
   // --- Command palette --------------------------------------------------------------------------
   await page.keyboard.press('Control+k');
-  await page.keyboard.type('T-03');
+  await page.keyboard.type(V3);
   await page.keyboard.press('Enter');
   await page.getByText('Run tracking').or(page.getByText('Today’s runs')).first().waitFor();
   check('command palette finds and selects a vehicle', await page.getByText('Telemetry').isVisible());

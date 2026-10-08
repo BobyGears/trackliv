@@ -465,7 +465,7 @@ class MapController {
       const home = vehicles.filter((v) => st.telemetry[v.id] && isAtDepot(st.telemetry[v.id], st.sites)).length;
       renderSiteMarker(this.hqCluster.el, {
         code: st.sites.map((s) => s.code).join(' · '),
-        name: 'DTE Flörsheim',
+        name: st.sites.length > 1 ? 'DTE Lager' : (st.sites[0]?.name ?? 'DTE'),
         color: '#1f4fd6',
         vehiclesHome: home,
         vehiclesTotal: vehicles.length,

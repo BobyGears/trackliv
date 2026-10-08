@@ -28,8 +28,12 @@ RELEASE = os.environ.get('OVERTURE_RELEASE', '2026-09-23.1')
 ROOT = f'overturemaps-us-west-2/release/{RELEASE}'
 CACHE = os.path.join(os.path.dirname(__file__), '.cache')
 
-# Area around both HQs (Schieferstein 4 / Hafenstraße 18, Flörsheim am Main).
-HQ_BBOX = (8.4035, 49.9975, 8.4235, 50.0120)
+# Full-detail areas around the sites: Schieferstein 4 + Hafenstraße 18 (Flörsheim am Main),
+# Neben dem Mühlweg 20-30 (Bischofsheim/Bauschheim).
+HQ_BBOXES = [
+    (8.4035, 49.9975, 8.4235, 50.0120),
+    (8.3760, 49.9672, 8.3960, 49.9812),
+]
 # Rhein-Main region where projects are.
 REGION_BBOX = (7.95, 49.75, 9.05, 50.35)
 
@@ -104,10 +108,18 @@ def query(theme, typ, bbox, columns=None):
     return pa.concat_tables(tables, promote_options='default') if tables else None
 
 
-def dump(name, theme, typ, bbox, columns=None, keep=lambda r: True):
-    t = query(theme, typ, bbox, columns=(columns + ['geometry', 'bbox']) if columns else None)
+def dump(name, theme, typ, bboxes, columns=None, keep=lambda r: True):
+    """bboxes: one bbox or a list of them (features in several are kept once)."""
+    rows, seen = [], set()
+    for bbox in (bboxes if isinstance(bboxes, list) else [bboxes]):
+        t = query(theme, typ, bbox, columns=(columns + ['geometry', 'bbox']) if columns else None)
+        for r in (t.to_pylist() if t is not None else []):
+            if r.get('id') in seen:
+                continue
+            seen.add(r.get('id'))
+            rows.append(r)
     feats = []
-    for r in (t.to_pylist() if t is not None else []):
+    for r in rows:
         if not keep(r):
             continue
         g = wkb.loads(r.pop('geometry'))
@@ -125,14 +137,14 @@ REGION_ROAD_CLASSES = {
 }
 
 JOBS = {
-    'hq_address': lambda: dump('hq_address', 'addresses', 'address', HQ_BBOX),
-    'hq_building': lambda: dump('hq_building', 'buildings', 'building', HQ_BBOX),
-    'hq_segment': lambda: dump('hq_segment', 'transportation', 'segment', HQ_BBOX),
-    'hq_water': lambda: dump('hq_water', 'base', 'water', HQ_BBOX),
-    'hq_land_use': lambda: dump('hq_land_use', 'base', 'land_use', HQ_BBOX),
-    'hq_land_cover': lambda: dump('hq_land_cover', 'base', 'land_cover', HQ_BBOX),
-    'hq_infrastructure': lambda: dump('hq_infrastructure', 'base', 'infrastructure', HQ_BBOX),
-    'hq_place': lambda: dump('hq_place', 'places', 'place', HQ_BBOX),
+    'hq_address': lambda: dump('hq_address', 'addresses', 'address', HQ_BBOXES),
+    'hq_building': lambda: dump('hq_building', 'buildings', 'building', HQ_BBOXES),
+    'hq_segment': lambda: dump('hq_segment', 'transportation', 'segment', HQ_BBOXES),
+    'hq_water': lambda: dump('hq_water', 'base', 'water', HQ_BBOXES),
+    'hq_land_use': lambda: dump('hq_land_use', 'base', 'land_use', HQ_BBOXES),
+    'hq_land_cover': lambda: dump('hq_land_cover', 'base', 'land_cover', HQ_BBOXES),
+    'hq_infrastructure': lambda: dump('hq_infrastructure', 'base', 'infrastructure', HQ_BBOXES),
+    'hq_place': lambda: dump('hq_place', 'places', 'place', HQ_BBOXES),
     'region_roads': lambda: dump('region_roads', 'transportation', 'segment', REGION_BBOX,
                                  ['id', 'names', 'subtype', 'class', 'connectors', 'road_flags'],
                                  lambda r: r['class'] in REGION_ROAD_CLASSES),
