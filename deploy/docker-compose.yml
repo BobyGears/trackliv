@@ -1,4 +1,5 @@
-# TrackLiv on the shared server, behind Registra Atlas' Caddy (network atlas-edge).
+# TrackLiv on the shared server, behind Registra Atlas' Caddy (network atlas-edge). Sign-in uses the
+# Registra Atlas accounts: the container reaches Atlas' Konto-Dienst in the network atlas-konto.
 # Started by ./deploy.sh – by hand:
 #   cd /opt/trackliv/app && docker compose --env-file /opt/trackliv/.env -f deploy/docker-compose.yml up -d --build
 name: trackliv
@@ -31,9 +32,13 @@ services:
     # no ports: only reachable through Caddy as trackliv-app:8787
     networks:
       - edge
+      - konto
     logging: *logging
 
 networks:
   edge:
     name: ${TRACKLIV_EDGE_NETWORK:-atlas-edge}
+    external: true
+  konto:
+    name: ${TRACKLIV_KONTO_NETWORK:-atlas-konto}
     external: true

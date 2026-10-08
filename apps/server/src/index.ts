@@ -20,7 +20,9 @@ import {
   type Project,
   type Vehicle,
 } from '@trackliv/core';
+import { AtlasSessions, atlasLogin, atlasProbe } from './atlasAuth.ts';
 import {
+  cookieValue,
   createAuth,
   issueSession,
   loginRateLimited,
@@ -33,7 +35,7 @@ import {
 import { db } from './db.ts';
 import { startFleetGoSync } from './fleetSync.ts';
 import { routeBetween, siteGeo, sites } from './geodata.ts';
-import { broadcast, clientCount, sseHandler } from './hub.ts';
+import { broadcast, clientCount, closeStreams, sseHandler, streamSessions } from './hub.ts';
 import { ops } from './ops.ts';
 import { demoPeople, demoProjects, demoVehicles } from './seed.ts';
 import { resetSimVehicle, startSimulator } from './simulator.ts';
@@ -80,12 +82,39 @@ const auth = createAuth(process.env);
 if (process.env.TRACKLIV_AUTH === 'off') {
   console.warn('[auth] login is OFF (TRACKLIV_AUTH=off) – anyone who can open the site can use TrackLiv');
 } else if (config.production && !auth.enabled) {
-  console.error('[trackliv] Refusing to start in production without users. Set TRACKLIV_USERS="Name:password,…" in .env');
-  console.error('           (or TRACKLIV_AUTH=off to run without a login, e.g. for a demo).');
+  console.error('[trackliv] Refusing to start in production without a login. ./deploy.sh connects the Registra Atlas');
+  console.error('           accounts (ATLAS_* in .env); otherwise set TRACKLIV_USERS="Name:password,…",');
+  console.error('           or TRACKLIV_AUTH=off to run without a login, e.g. for a demo.');
   process.exit(1);
 }
 if (auth.enabled && !/^[0-9a-f]{32,}$/i.test(process.env.TRACKLIV_SESSION_SECRET ?? '')) {
   console.warn('[auth] TRACKLIV_SESSION_SECRET not set – using a random one, everybody is signed out on restart');
+}
+
+// Registra Atlas accounts: sessions are kept server-side and re-checked with Atlas every 5 minutes.
+const atlasSessions =
+  auth.mode === 'atlas' && auth.atlas
+    ? new AtlasSessions(auth.atlas, auth.secret, join(config.dataDir, 'sessions.json'), (key, s, why) => {
+        closeStreams(key);
+        if (why === 'revoked' || why === 'unverified') {
+          ops.log({
+            kind: 'system',
+            severity: 'info',
+            title: `${s.name} signed out`,
+            detail: why === 'revoked' ? 'Atlas account locked, deactivated or without TrackLiv access' : 'Atlas could not confirm the account for 7 days',
+          });
+        }
+      })
+    : null;
+if (atlasSessions && auth.atlas) {
+  const a = auth.atlas.access;
+  const who = a.all ? 'every active Atlas account' : `Atlas admins${a.emails.size ? ` + ${a.emails.size} listed account${a.emails.size === 1 ? '' : 's'}` : ''}`;
+  if (process.env.TRACKLIV_USERS) console.log('[auth] TRACKLIV_USERS is ignored – sign-in uses the Registra Atlas accounts');
+  void atlasProbe(auth.atlas).then((r) => console.log(`[auth] sign-in with Registra Atlas accounts (access: ${who}) – ${r}`));
+  setInterval(() => {
+    void atlasSessions.recheckDue(streamSessions()).catch(() => {});
+    atlasSessions.save();
+  }, 60_000).unref();
 }
 
 const app = express();
@@ -130,14 +159,31 @@ if (config.production) {
 }
 
 // --- login -----------------------------------------------------------------------------------
-app.get('/api/auth/me', (req, res) => {
-  res.json({ authEnabled: auth.enabled, user: auth.enabled ? sessionUser(auth, req) : null });
+app.get('/api/auth/me', async (req, res) => {
+  const provider = auth.mode === 'off' ? null : auth.mode;
+  const atlasUrl = auth.atlas?.siteUrl ?? null;
+  if (atlasSessions) {
+    const s = await atlasSessions.resolve(cookieValue(req)).catch(() => null);
+    return void res.json({ authEnabled: true, user: s?.user ?? null, provider, atlasUrl });
+  }
+  res.json({ authEnabled: auth.enabled, user: auth.enabled ? sessionUser(auth, req) : null, provider, atlasUrl });
 });
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const ip = req.ip ?? 'unknown';
   if (loginRateLimited(ip)) return void res.status(429).json({ error: 'Too many attempts – try again in 15 minutes' });
   const name = String(req.body?.username ?? '').trim();
   const password = String(req.body?.password ?? '');
+  if (atlasSessions && auth.atlas) {
+    if (!name || !password) return void res.status(400).json({ error: 'Wrong e-mail or password' });
+    const r = await atlasLogin(auth.atlas, name.toLowerCase(), password, ip);
+    if (!r.ok) {
+      if (r.failedPassword) noteFailedLogin(ip);
+      return void res.status(r.status).json({ error: r.error });
+    }
+    setSessionCookie(req, res, atlasSessions.create(r.identity, r.tokens));
+    ops.log({ kind: 'system', severity: 'info', title: `${r.identity.name} signed in`, detail: 'Registra Atlas account' });
+    return void res.json({ user: r.identity.name });
+  }
   const match = [...auth.users.entries()].find(([u]) => u.toLowerCase() === name.toLowerCase());
   if (!auth.enabled || !match || !verifyPassword(match[1], password)) {
     noteFailedLogin(ip);
@@ -147,7 +193,8 @@ app.post('/api/auth/login', (req, res) => {
   ops.log({ kind: 'system', severity: 'info', title: `${match[0]} signed in` });
   res.json({ user: match[0] });
 });
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
+  await atlasSessions?.logout(cookieValue(req));
   setSessionCookie(req, res, null);
   res.json({ ok: true });
 });
@@ -155,7 +202,7 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, mode: live ? 'fleetgo' : 'simulator', serverTime: ops.nowISO() });
 });
-app.use('/api', requireSession(auth));
+app.use('/api', requireSession(auth, atlasSessions));
 
 const actorOf = (req: Request, res?: Response) =>
   String(res?.locals.user ?? req.header('x-trackliv-user') ?? 'dispatcher').slice(0, 60);
@@ -429,10 +476,12 @@ app.listen(config.port, () => {
 process.on('SIGINT', () => {
   db.flush();
   flushHistory();
+  atlasSessions?.save();
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   db.flush();
   flushHistory();
+  atlasSessions?.save();
   process.exit(0);
 });

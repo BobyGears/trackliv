@@ -1,4 +1,4 @@
-import { Loader2, LogIn } from 'lucide-react';
+import { Loader2, LogIn, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useStore } from '../lib/store';
 import { Panel } from './kit';
@@ -8,6 +8,8 @@ import { t, tx } from '../lib/i18n';
 
 export function LoginScreen() {
   const login = useStore((s) => s.login);
+  const atlas = useStore((s) => s.authProvider === 'atlas');
+  const atlasUrl = useStore((s) => s.atlasUrl);
   const [name, setName] = useState(() => {
     try {
       return localStorage.getItem('trackliv:user') ?? '';
@@ -53,11 +55,18 @@ export function LoginScreen() {
           </div>
           <DteLogo className="ml-auto h-11 w-auto" />
         </div>
-        <form onSubmit={submit} className="mt-6 space-y-3">
+        {atlas && (
+          <div className="mt-5 flex items-center gap-2 rounded-lg border border-line bg-panel-2 px-3 py-2 text-[12px] text-ink-2">
+            <ShieldCheck size={15} className="shrink-0 text-primary" />
+            <span>{t('Sign in with your Registra Atlas account')}</span>
+          </div>
+        )}
+        <form onSubmit={submit} className={atlas ? 'mt-4 space-y-3' : 'mt-6 space-y-3'}>
           <label className="block">
-            <span className="mb-1 block text-[11.5px] font-semibold text-ink-2">{t('Name')}</span>
+            <span className="mb-1 block text-[11.5px] font-semibold text-ink-2">{atlas ? t('E-mail') : t('Name')}</span>
             <input
               autoFocus={!name}
+              type={atlas ? 'email' : 'text'}
               autoComplete="username"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -84,7 +93,18 @@ export function LoginScreen() {
             {busy ? <Loader2 size={15} className="animate-spin" /> : <LogIn size={15} />}{' '}{t('Sign in')}
           </button>
         </form>
-        <p className="mt-4 text-center text-[11px] text-subtle">{t('Accounts are managed by your TrackLiv administrator.')}</p>
+        {atlas ? (
+          <p className="mt-4 text-center text-[11px] leading-relaxed text-subtle">
+            {t('Same e-mail and password as in Atlas.')}{' '}
+            {atlasUrl && (
+              <a href={atlasUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                {t('Forgot your password? Reset it in Atlas')}
+              </a>
+            )}
+          </p>
+        ) : (
+          <p className="mt-4 text-center text-[11px] text-subtle">{t('Accounts are managed by your TrackLiv administrator.')}</p>
+        )}
       </Panel>
     </div>
   );

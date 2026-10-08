@@ -75,7 +75,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 }
 
 export const authApi = {
-  me: () => req<{ authEnabled: boolean; user: string | null }>('GET', '/api/auth/me'),
+  me: () => req<{ authEnabled: boolean; user: string | null; provider?: 'atlas' | 'local' | null; atlasUrl?: string | null }>('GET', '/api/auth/me'),
   login: (username: string, password: string) => req<{ user: string }>('POST', '/api/auth/login', { username, password }),
   logout: () => req<{ ok: boolean }>('POST', '/api/auth/logout'),
 };
@@ -120,6 +120,11 @@ export function openStream(h: StreamHandlers): () => void {
   on('clock');
   on('master');
   on('vehicles');
+  // the session ended (signed out elsewhere, or Atlas withdrew access) → back to the sign-in screen
+  es.addEventListener('auth', () => {
+    es.close();
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  });
   es.onopen = () => h.status(true);
   es.onerror = () => h.status(false);
   return () => es.close();

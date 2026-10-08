@@ -168,23 +168,34 @@ On the first run the script asks for the SSH login and port (the same as for Reg
 | Path | What |
 | --- | --- |
 | `app/` | the uploaded source (replaced on every deploy) |
-| `.env` | settings and secrets (chmod 600, never uploaded or overwritten). Created from `.env.example` on the first deploy, with a generated `TRACKLIV_SESSION_SECRET` and an `Admin` login. The deploy prints the Admin password once. |
+| `.env` | settings and secrets (chmod 600, never uploaded). Created from `.env.example` on the first deploy, with a generated `TRACKLIV_SESSION_SECRET`. Every deploy updates the Atlas sign-in values (`ATLAS_*`) and leaves everything else as it is. |
+| `data/sessions.json` | who is signed in (Atlas refresh tokens encrypted with the session secret) |
 | `data/db.json` | master data, plans and the audit log |
 | `data/backups/` | a daily copy (kept 30 days) and one before every deploy (last 20) |
 
 To switch from the simulator to live vehicles, put the FleetGO login (`FLEETGO_USERNAME`, `FLEETGO_PASSWORD`) into `/opt/trackliv/.env`, run `./deploy.sh --no-build`, then `./deploy.sh --fleetgo-check`.
 
-### Logins
+### Logins: Registra Atlas accounts
 
-`TRACKLIV_USERS` in the server `.env` lists who may sign in, as comma-separated `Name:password` pairs:
+People sign in to TrackLiv with their **Registra Atlas account**: the same e-mail and password as on atlas.dd-gruppe.de, from Atlas' own user database. TrackLiv stores no passwords. It asks Atlas the same way the Atlas web app does:
+- first Atlas' Konto-Dienst, over the internal Docker network `atlas-konto`;
+- then Atlas' Supabase, but only if the Konto-Dienst does not answer. A wrong password never falls back.
 
-```
-TRACKLIV_USERS=Admin:…,Boby:scrypt:…,Dispo 2:another-password
-```
+How it works:
+- **Settings:** every deploy copies just the needed values (`KONTO_ANON_KEY`, `KONTO_PRIMAER`, `SUPABASE_URL`) from `/opt/registra-atlas/.env` into TrackLiv's `.env` (`ATLAS_*`). Atlas' service keys and database passwords are never copied. The public Supabase key for the fallback comes from the Atlas project folder on your computer (`ATLAS_DIR` in `deploy/server.env`, default `~/Documents/GitHub/registra-atlas`).
+- **Who gets in:** set `ACCESS` in `deploy/server.env` and deploy:
+  - `admins` (the default): Atlas administrators only,
+  - `all`: every active Atlas account,
+  - or admins plus e-mails: `ACCESS="admins,dispo@dd-gruppe.de,lager@dd-gruppe.de"`.
+- **Staying in sync with Atlas:** TrackLiv checks each session with Atlas every 5 minutes. Someone who is locked or deactivated in Atlas, or removed from `ACCESS`, is signed out of TrackLiv too, and their open screen returns to the sign-in page.
+- **Passwords and lockouts:** a forgotten password is reset in Atlas. Atlas' lockout after failed attempts applies here as well.
+- **Signing out:** signing out of TrackLiv ends only the TrackLiv session; Atlas stays signed in.
+- **Sessions:** TrackLiv's own sessions last 30 days of use and survive deploys (`data/sessions.json`, refresh tokens encrypted).
+- **Audit log:** every change is attributed to the person's Atlas name.
 
-To run without a login (e.g. as a demo), set `LOGIN="off"` in `deploy/server.env` and deploy; `LOGIN="on"` switches it back on, and creates an `Admin` login if there is none.
+To run without a login (e.g. as a demo), set `LOGIN="off"` in `deploy/server.env` and deploy; `LOGIN="on"` switches it back on.
 
-Passwords can be plain (the file is only readable by its owner) or a scrypt hash from `npm run hash-password`. Don't use `$` or `,` in plain passwords. Sessions last 30 days. Removing a name signs that person out at their next request. After changing the file, run `./deploy.sh --no-build`. Every change in the audit log is attributed to the signed-in name.
+On a server without Registra Atlas, TrackLiv falls back to its own list: `TRACKLIV_USERS=Admin:…,Dispo 2:another-password` in the server `.env`. The deploy creates an `Admin` login and prints its password once. Passwords can be plain or a scrypt hash from `npm run hash-password`; don't use `$` or `,` in plain passwords.
 
 ## Architecture
 

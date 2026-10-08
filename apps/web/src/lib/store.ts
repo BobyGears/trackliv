@@ -63,6 +63,9 @@ interface State {
   /** 'checking' → 'signed-out' (login screen) | 'ok' (app). */
   auth: 'checking' | 'signed-out' | 'ok';
   authEnabled: boolean;
+  /** 'atlas' = sign in with the Registra Atlas account */
+  authProvider: 'atlas' | 'local' | null;
+  atlasUrl: string | null;
   user: string | null;
   ready: boolean;
   error?: string;
@@ -179,10 +182,13 @@ function restoreEditable(current: Assignment[], snapshot: Assignment[]): Assignm
 }
 
 let closeStream: (() => void) | null = null;
+let lastAuthProbe = 0;
 
 export const useStore = create<State & Actions>()((set, get) => ({
   auth: 'checking',
   authEnabled: false,
+  authProvider: null,
+  atlasUrl: null,
   user: null,
   ready: false,
   connected: false,
@@ -228,7 +234,13 @@ export const useStore = create<State & Actions>()((set, get) => ({
   async checkAuth() {
     try {
       const me = await authApi.me();
-      set({ authEnabled: me.authEnabled, user: me.user, auth: !me.authEnabled || me.user ? 'ok' : 'signed-out' });
+      set({
+        authEnabled: me.authEnabled,
+        authProvider: me.provider ?? null,
+        atlasUrl: me.atlasUrl ?? null,
+        user: me.user,
+        auth: !me.authEnabled || me.user ? 'ok' : 'signed-out',
+      });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -310,7 +322,19 @@ export const useStore = create<State & Actions>()((set, get) => ({
           if (m.projects) void get().refreshRoutes();
         },
         vehicles: (vehicles) => set({ vehicles }),
-        status: (connected) => set({ connected }),
+        status: (connected) => {
+          set({ connected });
+          // a stream that keeps failing may mean the session is gone (e.g. expired while the server restarted)
+          if (!connected && get().authEnabled && Date.now() - lastAuthProbe > 15_000) {
+            lastAuthProbe = Date.now();
+            void authApi
+              .me()
+              .then((me) => {
+                if (me.authEnabled && !me.user) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+              })
+              .catch(() => undefined);
+          }
+        },
       });
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) });

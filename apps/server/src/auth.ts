@@ -1,8 +1,10 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { atlasConfig, type AtlasConfig, type AtlasSessions } from './atlasAuth.ts';
 
 /**
- * Small, dependency-free login for a dispatch team.
+ * Login. With Registra Atlas on the same server (ATLAS_* in .env, see atlasAuth.ts) people sign in with
+ * their Atlas account. Without it, a small, dependency-free user list for a dispatch team:
  *
  *   TRACKLIV_USERS=Boby:scrypt:<salt>:<hash>,Dispo 2:plain-password
  *   TRACKLIV_SESSION_SECRET=<64 hex chars>
@@ -16,6 +18,9 @@ export interface AuthConfig {
   users: Map<string, string>;
   secret: Buffer;
   enabled: boolean;
+  /** 'atlas' = Registra Atlas accounts, 'local' = TRACKLIV_USERS, 'off' = no login */
+  mode: 'atlas' | 'local' | 'off';
+  atlas: AtlasConfig | null;
 }
 
 const COOKIE = 'tl_session';
@@ -58,7 +63,9 @@ export function createAuth(env: NodeJS.ProcessEnv): AuthConfig {
   const secretHex = env.TRACKLIV_SESSION_SECRET ?? '';
   const secret = /^[0-9a-f]{32,}$/i.test(secretHex) ? Buffer.from(secretHex, 'hex') : randomBytes(32);
   // TRACKLIV_AUTH=off switches the login off even when users are listed (e.g. for a demo)
-  return { users, secret, enabled: users.size > 0 && env.TRACKLIV_AUTH !== 'off' };
+  const atlas = atlasConfig(env);
+  const mode = env.TRACKLIV_AUTH === 'off' ? 'off' : atlas ? 'atlas' : users.size > 0 ? 'local' : 'off';
+  return { users, secret, enabled: mode !== 'off', mode, atlas };
 }
 
 function sign(auth: AuthConfig, payload: string) {
@@ -83,7 +90,7 @@ export function readSession(auth: AuthConfig, token: string | undefined): string
   }
 }
 
-function cookieValue(req: Request, name: string): string | undefined {
+export function cookieValue(req: Request, name = COOKIE): string | undefined {
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const i = part.indexOf('=');
     if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
@@ -121,10 +128,17 @@ export function noteFailedLogin(ip: string) {
   if (attempts.size > 5000) attempts.clear();
 }
 
-/** Guards /api/* (except auth + health) when users are configured. */
-export function requireSession(auth: AuthConfig) {
-  return (req: Request, res: Response, next: NextFunction) => {
+/** Guards /api/* (except auth + health) when a login is configured. */
+export function requireSession(auth: AuthConfig, atlas: AtlasSessions | null) {
+  return async (req: Request, res: Response, next: NextFunction) => {
     if (!auth.enabled) return next();
+    if (auth.mode === 'atlas') {
+      const s = await atlas?.resolve(cookieValue(req)).catch(() => null);
+      if (!s) return void res.status(401).json({ error: 'Please sign in' });
+      res.locals.user = s.user;
+      res.locals.sessionKey = s.key;
+      return next();
+    }
     const user = sessionUser(auth, req);
     if (!user) return void res.status(401).json({ error: 'Please sign in' });
     res.locals.user = user;
