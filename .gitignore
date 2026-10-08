@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+apps/server/var/
+*.log
+.DS_Store
+test-results/
+/screenshots/
+scripts/geo/.cache/
+__pycache__/
