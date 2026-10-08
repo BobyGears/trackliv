@@ -1,11 +1,12 @@
-import { destinationLabel, setTimes, type Assignment, type Vehicle } from '@trackliv/core';
+import { setTimes, type Assignment, type Vehicle } from '@trackliv/core';
 import { CalendarRange, Clock } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useOpsNow } from '../lib/derived';
+import { destLabel, stageLabel, useOpsNow } from '../lib/derived';
 import { STAGE_TONE, TONE_HEX, fmtDate, hhmmToMin, minToHhmm, opsDayStart, opsTime } from '../lib/format';
 import { useStore } from '../lib/store';
 import { DateNav } from './DateNav';
 import { AvatarStack, Panel, Pill, cx } from './kit';
+import { t } from '../lib/i18n';
 
 const START = 5 * 60;
 const END = 21 * 60;
@@ -111,8 +112,8 @@ export function ScheduleView() {
       <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
         <CalendarRange size={16} className="text-primary" />
         <div>
-          <div className="text-[14px] font-bold leading-tight">Schedule</div>
-          <div className="text-[11px] text-muted">{fmtDate(date)} · drag a bar to move the whole run, drag its ends to change departure or return · Esc cancels</div>
+          <div className="text-[14px] font-bold leading-tight">{t('Schedule')}</div>
+          <div className="text-[11px] text-muted">{fmtDate(date)}{' '}{t('· drag a bar to move the whole run, drag its ends to change departure or return · Esc cancels')}</div>
         </div>
         <DateNav showCopy={false} />
         <div className="flex-1" />
@@ -120,7 +121,7 @@ export function ScheduleView() {
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 grid grid-cols-[230px_1fr] border-b border-line bg-panel-solid/95 backdrop-blur">
-          <div className="px-4 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">Vehicle</div>
+          <div className="px-4 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">{t('Vehicle')}</div>
           <div ref={trackRef} className="relative h-7">
             {hours.map((h) => (
               <span key={h} className="mono absolute top-1.5 -translate-x-1/2 text-[10.5px] text-muted" style={{ left: pct(h) }}>
@@ -162,8 +163,8 @@ export function ScheduleView() {
                   <button onClick={() => select({ type: 'vehicle', id: v.id })} className="flex min-w-0 items-center gap-2 px-4 py-2 text-left hover:bg-panel-3">
                     <span className="mono w-14 shrink-0 whitespace-nowrap text-[12px] font-bold">{v.callsign}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[12px] font-semibold">{a?.crew.length ? destinationLabel(a.destination, projects) : v.status === 'active' ? 'Unassigned' : v.status}</span>
-                      <span className="block">{crew.length ? <AvatarStack people={crew} size={16} max={4} /> : <span className="text-[10.5px] text-subtle">no crew</span>}</span>
+                      <span className="block truncate text-[12px] font-semibold">{a?.crew.length ? destLabel(a.destination, projects) : v.status === 'active' ? t('Unassigned') : t(v.status === 'maintenance' ? 'In maintenance' : 'Inactive')}</span>
+                      <span className="block">{crew.length ? <AvatarStack people={crew} size={16} max={4} /> : <span className="text-[10.5px] text-subtle">{t('no crew')}</span>}</span>
                     </span>
                   </button>
                   <div className="relative h-[46px]">
@@ -185,7 +186,7 @@ export function ScheduleView() {
                           background: `color-mix(in srgb, ${color} 16%, var(--panel-solid))`,
                           borderColor: `color-mix(in srgb, ${color} 55%, transparent)`,
                         }}
-                        title={a.stage === 'planned' ? `${minToHhmm(dep)} – ${minToHhmm(ret)}` : `${minToHhmm(dep)} – ${minToHhmm(ret)} · on the road – only the return time can change`}
+                        title={a.stage === 'planned' ? `${minToHhmm(dep)} – ${minToHhmm(ret)}` : `${minToHhmm(dep)} – ${minToHhmm(ret)} · ${t('on the road – only the return time can change')}`}
                       >
                         {pv && (
                           <span className="mono pointer-events-none absolute -top-7 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-md bg-ink px-2 py-0.5 text-[11px] font-semibold text-panel-solid shadow-lg">
@@ -195,7 +196,7 @@ export function ScheduleView() {
                         <span className="absolute inset-y-0 left-0 w-1 rounded-l-lg" style={{ background: color }} />
                         <span className="pointer-events-none flex h-full items-center gap-1.5 overflow-hidden whitespace-nowrap pl-2.5 pr-2 text-[11px] font-semibold" style={{ color: `color-mix(in srgb, ${color} 75%, var(--text))` }}>
                           <span className="mono">{minToHhmm(dep)}</span>
-                          <span className="truncate">{destinationLabel(a.destination, projects)}</span>
+                          <span className="truncate">{destLabel(a.destination, projects)}</span>
                           <span className="ml-auto mono">{minToHhmm(ret)}</span>
                         </span>
                         {a.stage === 'planned' && <ResizeGrip side="left" onPointerDown={(e) => onPointerDown(e, v, a, 'start')} />}
@@ -215,7 +216,7 @@ export function ScheduleView() {
                     {late && dep !== null && (
                       <span className="pointer-events-none absolute top-0.5 -translate-x-1/2" style={{ left: pct(dep) }}>
                         <Pill tone="danger" className="!px-1 !py-0 text-[9.5px]">
-                          late
+                          {t('late')}
                         </Pill>
                       </span>
                     )}
@@ -247,16 +248,16 @@ function Legend() {
   return (
     <div className="flex items-center gap-3 text-[11px] text-muted">
       <span className="flex items-center gap-1.5">
-        <span className="h-2.5 w-5 rounded border border-primary/50 bg-primary-weak" /> Planned
+        <span className="h-2.5 w-5 rounded border border-primary/50 bg-primary-weak" />{' '}{t('Planned')}
       </span>
       {(['departed', 'on_site', 'returning'] as const).map((s) => (
         <span key={s} className="flex items-center gap-1.5">
           <span className="h-1 w-4 rounded-full" style={{ background: TONE_HEX[STAGE_TONE[s]] }} />
-          {s === 'departed' ? 'En route' : s === 'on_site' ? 'On site' : 'Returning'}
+          {stageLabel(s)}
         </span>
       ))}
       <span className="flex items-center gap-1.5">
-        <Clock size={11} className="text-danger" /> Now
+        <Clock size={11} className="text-danger" />{' '}{t('Now')}
       </span>
     </div>
   );

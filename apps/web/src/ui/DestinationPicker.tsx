@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { PRIORITY_TONE } from '../lib/format';
 import { useStore } from '../lib/store';
 import { cx, Pill, Toggle } from './kit';
+import { t } from '../lib/i18n';
 
 interface Props {
   anchor: HTMLElement;
@@ -68,7 +69,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
     setGeo([]);
     if (q.trim().length < 4) return setGeoState('idle');
     setGeoState('loading');
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       try {
         const r = await api.geocode(q.trim());
         setGeo(r.results);
@@ -78,7 +79,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
         setGeoState('error');
       }
     }, 450);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [q]);
 
   const crewByProject = useMemo(() => {
@@ -140,7 +141,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
             setActive(0);
           }}
           onKeyDown={onKey}
-          placeholder="Search projects, or type a custom destination / address…"
+          placeholder={t('Search projects, or type a custom destination / address…')}
           className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-subtle"
         />
         <button onClick={onClose} className="text-muted hover:text-ink">
@@ -148,8 +149,8 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
         </button>
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-1.5">
-        <div className="px-2 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">Projects</div>
-        {list.length === 0 && <div className="px-2 py-2 text-[12px] text-muted">No project matches “{q}”.</div>}
+        <div className="px-2 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">{t('Projects')}</div>
+        {list.length === 0 && <div className="px-2 py-2 text-[12px] text-muted">{t('No project matches “')}{q}”.</div>}
         {list.map((p, i) => {
           const isCurrent = value?.kind === 'project' && value.projectId === p.id;
           const crew = crewByProject.get(p.id) ?? 0;
@@ -168,8 +169,8 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate font-semibold">{p.name}</span>
-                  {isCurrent && <Pill tone="primary">current</Pill>}
-                  {p.status !== 'active' && <Pill>{p.status}</Pill>}
+                  {isCurrent && <Pill tone="primary">{t('current')}</Pill>}
+                  {p.status !== 'active' && <Pill>{t(p.status)}</Pill>}
                 </span>
                 <span className="block truncate text-[11px] text-muted">
                   <span className="mono">{p.code}</span> · {p.address}
@@ -178,7 +179,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
               <span className="shrink-0 text-right text-[11px] leading-tight">
                 <span className="block font-semibold text-ink-2">{home ? formatDistance(haversineM(home, p.location)) : ''}</span>
                 <span className={cx('block', crew >= (p.crewTarget ?? 0) ? 'text-success' : 'text-muted')}>
-                  {crew}/{p.crewTarget ?? '–'} crew
+                  {crew}/{p.crewTarget ?? '–'}{' '}{t('crew')}
                 </span>
               </span>
               <Pill tone={PRIORITY_TONE[p.priority]} className="hidden sm:inline-flex">
@@ -188,7 +189,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
           );
         })}
 
-        <div className="px-2 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">Custom destination</div>
+        <div className="px-2 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">{t('Custom destination')}</div>
         {q.trim().length >= 2 && (
           <button
             onMouseEnter={() => setActive(list.length)}
@@ -197,14 +198,14 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
           >
             <MapPin size={15} className="text-violet" />
             <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold">Use “{q.trim()}”</span>
-              <span className="block text-[11px] text-muted">Label only – drop a pin to enable arrival tracking</span>
+              <span className="block truncate font-semibold">{t('Use “')}{q.trim()}”</span>
+              <span className="block text-[11px] text-muted">{t('Label only – drop a pin to enable arrival tracking')}</span>
             </span>
           </button>
         )}
         {geoState === 'loading' && (
           <div className="flex items-center gap-2 px-2 py-1.5 text-[12px] text-muted">
-            <Loader2 size={13} className="animate-spin" /> Looking up address…
+            <Loader2 size={13} className="animate-spin" />{' '}{t('Looking up address…')}
           </div>
         )}
         {geoState === 'error' && <div className="px-2 py-1.5 text-[11.5px] text-warning">{geoError}</div>}
@@ -221,7 +222,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{g.label}</span>
                 <span className="block text-[11px] text-muted">
-                  {home ? `${formatDistance(haversineM(home, g))} from ${vehicle?.callsign ?? ''} depot` : ''}
+                  {home ? t('{dist} from {v} depot', { dist: formatDistance(haversineM(home, g)), v: vehicle?.callsign ?? '' }) : ''}
                 </span>
               </span>
             </button>
@@ -234,11 +235,11 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
             const lock_ = lock;
             st.setView('map');
             st.setMapPick({
-              label: `Click on the map to set ${vehicle?.callsign ?? 'the vehicle'}’s destination`,
+              label: t('Click on the map to set the destination of {v}', { v: vehicle?.callsign ?? '' }),
               onPick: (loc) => {
-                const label = q.trim() || `Pin ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`;
+                const label = q.trim() || `${t('Pin')} ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`;
                 onSelect({ kind: 'custom', label, location: loc }, lock_);
-                useStore.getState().toast({ kind: 'success', title: `${vehicle?.callsign ?? 'Vehicle'} → ${label}`, detail: 'Type a name in the search box first to label the pin.' });
+                useStore.getState().toast({ kind: 'success', title: `${vehicle?.callsign ?? t('Vehicle')} → ${label}`, detail: t('Type a name in the search box first to label the pin.') });
               },
             });
             onClose();
@@ -247,8 +248,8 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
         >
           <Crosshair size={15} className="text-ink-2" />
           <span>
-            <span className="block font-semibold">Drop a pin on the map</span>
-            <span className="block text-[11px] text-muted">Click anywhere to set an exact destination</span>
+            <span className="block font-semibold">{t('Drop a pin on the map')}</span>
+            <span className="block text-[11px] text-muted">{t('Click anywhere to set an exact destination')}</span>
           </span>
         </button>
         )}
@@ -260,10 +261,10 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
             onChange={setLock}
             label={
               <span className="inline-flex items-center gap-1.5 text-[12px]">
-                {lock ? <Lock size={12} /> : <Unlock size={12} />} Pin destination
+                {lock ? <Lock size={12} /> : <Unlock size={12} />}{' '}{t('Pin destination')}
               </span>
             }
-            hint="Randomize keeps pinned destinations"
+            hint={t('Randomize keeps pinned destinations')}
           />
         </div>
         {value && (
@@ -274,7 +275,7 @@ export function DestinationPicker({ anchor, vehicleId, value, locked, onSelect, 
             }}
             className="text-[12px] font-semibold text-danger hover:underline"
           >
-            Clear
+            {t('Clear')}
           </button>
         )}
       </div>

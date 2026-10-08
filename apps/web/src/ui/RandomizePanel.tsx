@@ -1,8 +1,10 @@
-import { destinationLabel, fullName, type ID } from '@trackliv/core';
+import { fullName, type ID } from '@trackliv/core';
 import { AlertTriangle, ArrowRight, Dices, Lock, Shuffle, Truck, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { useStore } from '../lib/store';
 import { Button, IconButton, Panel, SectionLabel, Segmented, Toggle, cx } from './kit';
+import { t, plural } from '../lib/i18n';
+import { destLabel } from '../lib/derived';
 
 export function RandomizePanel() {
   const scenario = useStore((s) => s.scenario);
@@ -26,7 +28,7 @@ export function RandomizePanel() {
       if (mv.from) get(mv.from).removed.push(mv.personId);
     }
     for (const d of scenario.diff.destinationChanges) {
-      get(d.vehicleId).dest = { from: d.from ? destinationLabel(d.from, projects) : '—', to: d.to ? destinationLabel(d.to, projects) : '—' };
+      get(d.vehicleId).dest = { from: d.from ? destLabel(d.from, projects) : '—', to: d.to ? destLabel(d.to, projects) : '—' };
     }
     return vehicles.filter((v) => m.has(v.id)).map((v) => ({ v, ...m.get(v.id)! }));
   }, [scenario, vehicles, projects]);
@@ -46,36 +48,39 @@ export function RandomizePanel() {
             <Shuffle size={15} />
           </span>
           <div className="flex-1">
-            <div className="text-[14px] font-bold leading-tight">Randomize scenario</div>
+            <div className="text-[14px] font-bold leading-tight">{t('Randomize scenario')}</div>
             <div className="text-[11px] text-muted">
-              Seed <span className="mono font-semibold text-ink-2">{scenario.seed}</span> · reproducible
+              {t('Seed')}{' '}<span className="mono font-semibold text-ink-2">{scenario.seed}</span>{' '}{t('· reproducible')}
             </div>
           </div>
-          <IconButton size="sm" label="Discard" onClick={() => useStore.getState().discardScenario()}>
+          <IconButton size="sm" label={t('Discard')} onClick={() => useStore.getState().discardScenario()}>
             <X size={15} />
           </IconButton>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          <Stat value={`${s.peopleAssigned}`} sub={`of ${s.peopleAssigned + s.peopleUnassigned} people`} />
-          <Stat value={`${s.vehiclesStaffed}`} sub="vehicles staffed" />
-          <Stat value={`${s.projectsCovered}/${s.projectsActive}`} sub="projects covered" />
+          <Stat value={`${s.peopleAssigned}`} sub={t('of {n} people', { n: s.peopleAssigned + s.peopleUnassigned })} />
+          <Stat value={`${s.vehiclesStaffed}`} sub={t('vehicles staffed')} />
+          <Stat value={`${s.projectsCovered}/${s.projectsActive}`} sub={t('projects covered')} />
         </div>
         {(s.pinnedPeople > 0 || s.pinnedVehicles > 0) && (
           <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-violet-weak px-2.5 py-1.5 text-[11.5px] font-medium text-violet">
-            <Lock size={12} /> Keeping {s.pinnedPeople} pinned {s.pinnedPeople === 1 ? 'person' : 'people'} · {s.pinnedVehicles} pinned vehicle{s.pinnedVehicles === 1 ? '' : 's'}
+            <Lock size={12} />{' '}{t('Keeping')}{' '}{s.pinnedPeople}{' '}{t('pinned')}{' '}{s.pinnedPeople === 1 ? 'person' : 'people'} · {s.pinnedVehicles}{' '}{t('pinned vehicle')}{s.pinnedVehicles === 1 ? '' : 's'}
           </div>
         )}
         {s.frozenVehicles > 0 && (
           <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-panel-3 px-2.5 py-1.5 text-[11.5px] font-medium text-muted">
-            <Truck size={12} /> {s.frozenVehicles} vehicle{s.frozenVehicles === 1 ? ' is' : 's are'} already on the road{opts.siteId ? ' or at the other depot' : ''} and stay{s.frozenVehicles === 1 ? 's' : ''} as is
+            <Truck size={12} />{' '}
+            {opts.siteId
+              ? t(plural(s.frozenVehicles, '{n} vehicle is already on the road or at the other depot and stays as is', '{n} vehicles are already on the road or at the other depot and stay as is'), { n: s.frozenVehicles })
+              : t(plural(s.frozenVehicles, '{n} vehicle is already on the road and stays as is', '{n} vehicles are already on the road and stay as is'), { n: s.frozenVehicles })}
           </div>
         )}
       </div>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <SectionLabel>Rules</SectionLabel>
+        <SectionLabel>{t('Rules')}</SectionLabel>
         <div className="mt-2 flex items-center justify-between">
-          <span className="font-medium">Preferred crew size</span>
+          <span className="font-medium">{t('Preferred crew size')}</span>
           <Segmented
             size="sm"
             value={String(opts.targetCrew)}
@@ -84,18 +89,18 @@ export function RandomizePanel() {
           />
         </div>
         <div className="mt-1 flex items-center justify-between">
-          <span className="font-medium">Depots</span>
+          <span className="font-medium">{t('Depots')}</span>
           <Segmented
             size="sm"
             value={opts.siteId ?? 'all'}
             onChange={(v) => preview({ siteId: v === 'all' ? undefined : v })}
-            options={[{ value: 'all', label: 'All' }, ...sites.map((x) => ({ value: x.id, label: x.code }))]}
+            options={[{ value: 'all', label: t('All') }, ...sites.map((x) => ({ value: x.id, label: x.code }))]}
           />
         </div>
-        <Toggle on={opts.requireDriver} onChange={(v) => preview({ requireDriver: v })} label="Licensed driver on every vehicle" hint="Uses the licence class each vehicle needs (B, C1, C…)" />
-        <Toggle on={opts.coverAllProjects} onChange={(v) => preview({ coverAllProjects: v })} label="Cover every active project first" hint="Then spread the rest by priority" />
-        <Toggle on={opts.preferHomeSite} onChange={(v) => preview({ preferHomeSite: v })} label="Prefer people’s own depot" />
-        <Toggle on={opts.topUpPinnedCrews} onChange={(v) => preview({ topUpPinnedCrews: v })} label="Top up pinned crews" hint="Off: pinned vehicles keep exactly the people you pinned" />
+        <Toggle on={opts.requireDriver} onChange={(v) => preview({ requireDriver: v })} label={t('Licensed driver on every vehicle')} hint={t('Uses the licence class each vehicle needs (B, C1, C…)')} />
+        <Toggle on={opts.coverAllProjects} onChange={(v) => preview({ coverAllProjects: v })} label={t('Cover every active project first')} hint={t('Then spread the rest by priority')} />
+        <Toggle on={opts.preferHomeSite} onChange={(v) => preview({ preferHomeSite: v })} label={t('Prefer people’s own depot')} />
+        <Toggle on={opts.topUpPinnedCrews} onChange={(v) => preview({ topUpPinnedCrews: v })} label={t('Top up pinned crews')} hint={t('Off: pinned vehicles keep exactly the people you pinned')} />
 
         {scenario.warnings.length > 0 && (
           <div className="mt-3 space-y-1">
@@ -107,11 +112,11 @@ export function RandomizePanel() {
           </div>
         )}
 
-        <SectionLabel className="mt-4" right={<span className="text-[11px] text-muted">{scenario.diff.moves.length} moves · {scenario.diff.destinationChanges.length} destinations</span>}>
-          Proposed changes
+        <SectionLabel className="mt-4" right={<span className="text-[11px] text-muted">{scenario.diff.moves.length}{' '}{t('moves ·')}{' '}{scenario.diff.destinationChanges.length}{' '}{t('destinations')}</span>}>
+          {t('Proposed changes')}
         </SectionLabel>
         <div className="mt-1.5 space-y-1.5">
-          {byVehicle.length === 0 && <div className="py-3 text-[12px] text-muted">Nothing would change.</div>}
+          {byVehicle.length === 0 && <div className="py-3 text-[12px] text-muted">{t('Nothing would change.')}</div>}
           {byVehicle.map(({ v, added, removed, dest }) => (
             <div key={v.id} className="rounded-lg border border-line bg-panel-2 px-2.5 py-2 text-[11.5px]">
               <div className="flex items-center gap-1.5 font-semibold">
@@ -132,13 +137,13 @@ export function RandomizePanel() {
       </div>
       <div className="flex gap-2 border-t border-line bg-panel-2 px-4 py-3">
         <Button variant="ghost" onClick={() => useStore.getState().discardScenario()}>
-          Discard
+          {t('Discard')}
         </Button>
         <Button icon={<Dices size={14} />} onClick={() => useStore.getState().rerollScenario()}>
-          Reroll
+          {t('Reroll')}
         </Button>
         <Button variant="violet" className="flex-1" icon={<Shuffle size={14} />} onClick={() => useStore.getState().applyScenario()}>
-          Apply scenario
+          {t('Apply scenario')}
         </Button>
       </div>
     </Panel>

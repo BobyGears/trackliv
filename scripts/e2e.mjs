@@ -253,6 +253,15 @@ try {
   const events = await api('/api/bootstrap');
   check('audit log records the signed-in user', events.events.some((e) => (e.detail ?? '').includes('E2E Tester') || e.title.includes('E2E Tester')));
 
+  // German: one click switches every text, a second click switches back
+  await page.keyboard.press('Escape');
+  await page.locator('button[title="Auf Deutsch umstellen"]').click();
+  await page.getByText('Disposition', { exact: true }).first().waitFor({ timeout: 5000 });
+  const german = (await page.getByText('Zeitplan', { exact: true }).count()) > 0 && (await page.getByText('Heutige Fahrten').count()) > 0;
+  await page.locator('button[title="Switch to English"]').click();
+  await page.getByText('Today’s runs').waitFor({ timeout: 5000 });
+  check('German interface (DE/EN switch)', german);
+
   // Sign out → back to the sign-in screen
   await page.keyboard.press('Escape');
   await page.locator('button[title^="Signed in as"]').click();

@@ -1,5 +1,4 @@
 import {
-  STAGE_LABEL,
   assignPerson,
   canDrive,
   crewCapacity,
@@ -40,11 +39,12 @@ import {
 } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
-import { runInfo, useOpsNow, vehicleKindLabel, vehicleDesc } from '../lib/derived';
+import { runInfo, useOpsNow, vehicleKindLabel, vehicleDesc, stageLabel } from '../lib/derived';
 import { PRIORITY_TONE, STAGE_TONE, fmtAgo, fmtDuration, fmtTime } from '../lib/format';
 import { useStore, type Selection } from '../lib/store';
 import { DestinationPicker } from './DestinationPicker';
 import { Avatar, AvatarStack, Button, IconButton, LicenseChips, Panel, Pill, ProgressBar, Prop, SectionLabel, cx } from './kit';
+import { t, tx } from '../lib/i18n';
 
 export function ObjectPanel() {
   const selection = useStore((s) => s.selection);
@@ -71,7 +71,7 @@ function Header({ kicker, title, sub, icon, color, actions }: { kicker: string; 
         </span>
         <span className="flex-1 truncate text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">{kicker}</span>
         {actions}
-        <IconButton size="sm" label="Close" onClick={() => select(null)}>
+        <IconButton size="sm" label={t('Close')} onClick={() => select(null)}>
           <X size={15} />
         </IconButton>
       </div>
@@ -123,7 +123,7 @@ function VehiclePanel({ id }: { id: ID }) {
   return (
     <>
       <Header
-        kicker={`Vehicle · ${vehicleKindLabel[v.kind]}${v.make || v.model ? ` · ${vehicleDesc(v)}` : ''}`}
+        kicker={`${t('Vehicle')} · ${vehicleKindLabel[v.kind]}${v.make || v.model ? ` · ${vehicleDesc(v)}` : ''}`}
         title={
           <span className="flex items-center gap-2">
             {v.callsign}
@@ -133,7 +133,7 @@ function VehiclePanel({ id }: { id: ID }) {
         icon={<Truck size={13} />}
         color={project?.color ?? '#64748b'}
         actions={
-          <IconButton size="sm" label="Focus on map" onClick={() => useStore.getState().requestFocus({ kind: 'vehicle', id })}>
+          <IconButton size="sm" label={t('Focus on map')} onClick={() => useStore.getState().requestFocus({ kind: 'vehicle', id })}>
             <Crosshair size={15} />
           </IconButton>
         }
@@ -141,17 +141,17 @@ function VehiclePanel({ id }: { id: ID }) {
       <div className="space-y-4 px-4 py-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <Pill tone={STAGE_TONE[info.stage]} dot>
-            {info.late ? 'Late to depart' : info.stageLabel}
+            {info.late ? t('Late to depart') : info.stageLabel}
           </Pill>
-          {v.status !== 'active' && <Pill tone="warning">{v.status}</Pill>}
+          {v.status !== 'active' && <Pill tone="warning">{t(v.status)}</Pill>}
           {telemetry ? (
-            <Pill tone={telemetry.ignition ? 'success' : 'neutral'}>{telemetry.ignition ? `Ignition on · ${telemetry.speedKmh} km/h` : 'Parked'}</Pill>
+            <Pill tone={telemetry.ignition ? 'success' : 'neutral'}>{telemetry.ignition ? t('Ignition on · {speed} km/h', { speed: telemetry.speedKmh }) : t('Parked')}</Pill>
           ) : (
-            <Pill tone="danger">No GPS signal</Pill>
+            <Pill tone="danger">{t('No GPS signal')}</Pill>
           )}
           {fullyLocked && (
             <Pill tone="violet">
-              <Lock size={10} /> pinned
+              <Lock size={10} />{' '}{t('pinned')}
             </Pill>
           )}
         </div>
@@ -159,14 +159,14 @@ function VehiclePanel({ id }: { id: ID }) {
         {/* Run progress, like the "battery" bar in the reference */}
         <div className="rounded-xl border border-line bg-panel-2 p-3">
           <div className="flex items-center justify-between text-[12px]">
-            <span className="font-semibold">{a?.crew.length ? `${info.stageLabel} · ${info.destLabel}` : 'No run planned'}</span>
+            <span className="font-semibold">{a?.crew.length ? `${info.stageLabel} · ${info.destLabel}` : t('No run planned')}</span>
             <span className="text-muted">
               {info.etaMin !== null && (info.stage === 'departed' || info.stage === 'returning')
-                ? `ETA ${fmtDuration(info.etaMin)}`
+                ? t('ETA {time}', { time: fmtDuration(info.etaMin) })
                 : info.stage === 'planned' && a?.departAt
-                  ? `leaves ${a.departAt}`
+                  ? t('leaves {time}', { time: a.departAt })
                   : info.stage === 'on_site' && a?.returnAt
-                    ? `back ${a.returnAt}`
+                    ? t('back {time}', { time: a.returnAt })
                     : ''}
             </span>
           </div>
@@ -175,7 +175,7 @@ function VehiclePanel({ id }: { id: ID }) {
           </div>
           <div className="mt-1.5 flex justify-between text-[11px] text-muted">
             <span>{home?.code}</span>
-            <span>{info.remainingM !== null ? `${formatDistance(info.remainingM)} to go` : ''}</span>
+            <span>{info.remainingM !== null ? t('{dist} to go', { dist: formatDistance(info.remainingM) }) : ''}</span>
             <span className="max-w-36 truncate">{info.destLabel}</span>
           </div>
         </div>
@@ -183,12 +183,12 @@ function VehiclePanel({ id }: { id: ID }) {
         <div className="flex flex-wrap gap-1.5">
           {canDispatch && (
             <Button size="sm" variant="primary" icon={<Play size={13} />} onClick={() => useStore.getState().dispatchNow(id)}>
-              Dispatch now
+              {t('Dispatch now')}
             </Button>
           )}
           {canRecall && (
             <Button size="sm" icon={<RotateCcw size={13} />} onClick={() => useStore.getState().recall(id)}>
-              Recall to depot
+              {t('Recall to depot')}
             </Button>
           )}
           <Button
@@ -197,9 +197,9 @@ function VehiclePanel({ id }: { id: ID }) {
             icon={fullyLocked ? <Lock size={13} /> : <Unlock size={13} />}
             disabled={!a?.crew.length}
             onClick={() => commit((list) => setVehicleLock(list, id, !fullyLocked), fullyLocked ? `${v.callsign} unpinned` : `${v.callsign} pinned`)}
-            title="Pinned crews and destinations are kept by Randomize"
+            title={t('Pinned crews and destinations are kept by Randomize')}
           >
-            {fullyLocked ? 'Pinned' : 'Pin crew & destination'}
+            {fullyLocked ? t('Pinned') : t('Pin crew & destination')}
           </Button>
         </div>
 
@@ -207,14 +207,14 @@ function VehiclePanel({ id }: { id: ID }) {
           <div className="space-y-1">
             {issues.map((i, k) => (
               <div key={k} className={cx('rounded-lg px-2.5 py-1.5 text-[12px]', i.severity === 'error' ? 'bg-danger-weak text-danger' : i.severity === 'warning' ? 'bg-warning-weak text-warning' : 'bg-panel-3 text-muted')}>
-                {i.message}
+                {tx(i.message)}
               </div>
             ))}
           </div>
         )}
 
         <div>
-          <SectionLabel right={<span className="text-[11px] text-muted">{a?.crew.length ?? 0} / {cap} seats</span>}>Crew</SectionLabel>
+          <SectionLabel right={<span className="text-[11px] text-muted">{a?.crew.length ?? 0} / {cap}{' '}{t('seats')}</span>}>{t('Crew')}</SectionLabel>
           <div className="mt-1.5 space-y-0.5">
             {crew.map((p, i) => {
               const locked = a?.lockedCrew.includes(p.id);
@@ -224,16 +224,16 @@ function VehiclePanel({ id }: { id: ID }) {
                   <button className="min-w-0 flex-1 text-left" onClick={() => select({ type: 'person', id: p.id })}>
                     <span className="block truncate font-semibold">
                       {fullName(p)}
-                      {i === 0 && canDrive(p, v) && <span className="ml-1.5 text-[10.5px] font-medium text-primary">driver</span>}
+                      {i === 0 && canDrive(p, v) && <span className="ml-1.5 text-[10.5px] font-medium text-primary">{t('driver')}</span>}
                     </span>
                     <span className="flex items-center gap-1.5 text-[11px] text-muted">
-                      {p.role} <LicenseChips licenses={p.licenses} />
+                      {t(p.role)} <LicenseChips licenses={p.licenses} />
                     </span>
                   </button>
-                  <IconButton size="sm" label={locked ? 'Unpin from vehicle' : 'Pin to this vehicle'} active={locked} onClick={() => commit((list) => toggleCrewLock(list, id, p.id))}>
+                  <IconButton size="sm" label={locked ? t('Unpin from vehicle') : t('Pin to this vehicle')} active={locked} onClick={() => commit((list) => toggleCrewLock(list, id, p.id))}>
                     {locked ? <Lock size={13} /> : <Unlock size={13} />}
                   </IconButton>
-                  <IconButton size="sm" label="Remove from vehicle" onClick={() => commit((list) => unassignPerson(list, p.id), `${fullName(p)} removed from ${v.callsign}`)}>
+                  <IconButton size="sm" label={t('Remove from vehicle')} onClick={() => commit((list) => unassignPerson(list, p.id), `${fullName(p)} removed from ${v.callsign}`)}>
                     <X size={13} />
                   </IconButton>
                 </div>
@@ -241,7 +241,7 @@ function VehiclePanel({ id }: { id: ID }) {
             })}
             {(a?.crew.length ?? 0) < cap && !adding && (
               <button onClick={() => setAdding(true)} className="flex w-full items-center gap-2 rounded-lg border border-dashed border-line-strong px-2 py-1.5 text-[12px] font-semibold text-muted hover:border-primary hover:text-primary">
-                <Plus size={14} /> Add crew member
+                <Plus size={14} />{' '}{t('Add crew member')}
               </button>
             )}
             {adding && (
@@ -257,16 +257,16 @@ function VehiclePanel({ id }: { id: ID }) {
                 }}
               >
                 <option value="" disabled>
-                  Choose a person…
+                  {t('Choose a person…')}
                 </option>
                 {free.map((p) => {
                   const on = findVehicleOf(p.id);
                   return (
                     <option key={p.id} value={p.id} disabled={p.status !== 'available'}>
-                      {fullName(p)} · {p.role}
+                      {fullName(p)} · {t(p.role)}
                       {p.licenses.length ? ` · ${p.licenses.join('/')}` : ''}
-                      {on ? ` (on ${on})` : ''}
-                      {p.status !== 'available' ? ` – ${p.status}` : ''}
+                      {on ? ` (${t('on {v}', { v: on })})` : ''}
+                      {p.status !== 'available' ? ` – ${t(p.status)}` : ''}
                     </option>
                   );
                 })}
@@ -276,10 +276,10 @@ function VehiclePanel({ id }: { id: ID }) {
         </div>
 
         <div>
-          <SectionLabel>Assignment</SectionLabel>
+          <SectionLabel>{t('Assignment')}</SectionLabel>
           <div className="mt-1.5">
             <div className="flex min-h-7 items-center justify-between gap-3 border-b border-line py-1">
-              <span className="text-muted">Destination</span>
+              <span className="text-muted">{t('Destination')}</span>
               <button
                 ref={destBtn}
                 onClick={() => setPicker(true)}
@@ -288,32 +288,32 @@ function VehiclePanel({ id }: { id: ID }) {
                 {a?.destinationLocked && <Lock size={11} className="text-violet" />}
                 {project && <span className="size-2 rounded-full" style={{ background: project.color }} />}
                 {!project && a?.destination && <MapPin size={12} className="text-violet" />}
-                <span className="truncate">{a?.destination ? info.destLabel : 'Choose…'}</span>
+                <span className="truncate">{a?.destination ? info.destLabel : t('Choose…')}</span>
               </button>
             </div>
             <div className="flex min-h-7 items-center justify-between gap-3 border-b border-line py-1">
-              <span className="text-muted">Depart / return</span>
+              <span className="text-muted">{t('Depart / return')}</span>
               <span className="flex items-center gap-1">
                 <TimeInput value={a?.departAt} onChange={(t) => commit((list) => setTimes(list, id, { departAt: t }))} />
                 <span className="text-subtle">→</span>
                 <TimeInput value={a?.returnAt} onChange={(t) => commit((list) => setTimes(list, id, { returnAt: t }))} />
               </span>
             </div>
-            {a?.stageTimes.departed && <Prop label="Departed">{fmtTime(a.stageTimes.departed)}</Prop>}
-            {a?.stageTimes.on_site && <Prop label="Arrived on site">{fmtTime(a.stageTimes.on_site)}</Prop>}
-            {a?.stageTimes.completed && <Prop label="Back at depot">{fmtTime(a.stageTimes.completed)}</Prop>}
+            {a?.stageTimes.departed && <Prop label={t('Departed')}>{fmtTime(a.stageTimes.departed)}</Prop>}
+            {a?.stageTimes.on_site && <Prop label={t('Arrived on site')}>{fmtTime(a.stageTimes.on_site)}</Prop>}
+            {a?.stageTimes.completed && <Prop label={t('Back at depot')}>{fmtTime(a.stageTimes.completed)}</Prop>}
           </div>
         </div>
 
         <div>
-          <SectionLabel right={<span className="text-[11px] text-muted">{telemetry?.source === 'fleetgo' ? 'FleetGO' : 'Simulator'}</span>}>Telemetry</SectionLabel>
+          <SectionLabel right={<span className="text-[11px] text-muted">{telemetry?.source === 'fleetgo' ? 'FleetGO' : t('Simulator')}</span>}>{t('Telemetry')}</SectionLabel>
           <div className="mt-1.5">
-            <Prop label="Last GPS fix">{telemetry ? fmtAgo(telemetry.ts, now) : '–'}</Prop>
-            <Prop label="Speed">{telemetry ? `${telemetry.speedKmh} km/h` : '–'}</Prop>
+            <Prop label={t('Last GPS fix')}>{telemetry ? fmtAgo(telemetry.ts, now) : '–'}</Prop>
+            <Prop label={t('Speed')}>{telemetry ? `${telemetry.speedKmh} km/h` : '–'}</Prop>
             {telemetry?.fuelPct !== undefined && (
               <div className="flex min-h-7 items-center justify-between gap-3 border-b border-line py-1">
                 <span className="flex items-center gap-1 text-muted">
-                  <Fuel size={12} /> Fuel
+                  <Fuel size={12} />{' '}{t('Fuel')}
                 </span>
                 <span className="flex w-36 items-center gap-2">
                   <ProgressBar value={telemetry.fuelPct} tone={telemetry.fuelPct < 25 ? 'warning' : 'success'} />
@@ -321,18 +321,18 @@ function VehiclePanel({ id }: { id: ID }) {
                 </span>
               </div>
             )}
-            <Prop label="Odometer">{telemetry?.odometerKm ? `${Math.round(telemetry.odometerKm).toLocaleString('de-DE')} km` : '–'}</Prop>
-            <Prop label="Position" mono>
+            <Prop label={t('Odometer')}>{telemetry?.odometerKm ? `${Math.round(telemetry.odometerKm).toLocaleString('de-DE')} km` : '–'}</Prop>
+            <Prop label={t('Position')} mono>
               {telemetry ? `${telemetry.lat.toFixed(5)}, ${telemetry.lng.toFixed(5)}` : '–'}
             </Prop>
-            <Prop label="Home depot">{home ? `${home.code} · ${home.name}` : '–'}</Prop>
-            <Prop label="Licence needed">{v.requiredLicense}</Prop>
+            <Prop label={t('Home depot')}>{home ? `${home.code} · ${home.name}` : '–'}</Prop>
+            <Prop label={t('Licence needed')}>{v.requiredLicense}</Prop>
           </div>
         </div>
 
         {project && (
           <div>
-            <SectionLabel>Linked project</SectionLabel>
+            <SectionLabel>{t('Linked project')}</SectionLabel>
             <div className="mt-1">
               <Linked onClick={() => select({ type: 'project', id: project.id })}>
                 <span className="grid size-7 place-items-center rounded-md text-white" style={{ background: project.color }}>
@@ -418,7 +418,7 @@ export function TimeInput({ value, onChange }: { value?: string; onChange: (v: s
         'mono h-7 w-[58px] rounded-md border bg-panel-solid px-1.5 text-center text-[12px] text-ink outline-none focus:border-primary',
         invalid ? 'border-danger' : 'border-line',
       )}
-      title="HH:MM (24 h) · ↑/↓ ±5 min"
+      title={t('HH:MM (24 h) · ↑/↓ ±5 min')}
     />
   );
 }
@@ -453,13 +453,13 @@ function PersonPanel({ id }: { id: ID }) {
       await api.save<Person>('people', { ...person, status });
       if (status !== 'available' && a) commit((list) => unassignPerson(list, id), `${fullName(person)} is ${status} – removed from ${vehicle?.callsign}`);
     } catch (e) {
-      useStore.getState().toast({ kind: 'error', title: 'Could not update status', detail: String(e) });
+      useStore.getState().toast({ kind: 'error', title: t('Could not update status'), detail: String(e) });
     }
   };
 
   return (
     <>
-      <Header kicker={`Person · ${person.role}`} title={fullName(person)} sub={home ? `${home.code} · ${home.name}` : undefined} icon={<UserRound size={13} />} color="#64748b" />
+      <Header kicker={`${t('Person')} · ${t(person.role)}`} title={fullName(person)} sub={home ? `${home.code} · ${home.name}` : undefined} icon={<UserRound size={13} />} color="#64748b" />
       <div className="space-y-4 px-4 py-3">
         <div className="flex items-center gap-3">
           <Avatar person={person} size={44} />
@@ -477,12 +477,12 @@ function PersonPanel({ id }: { id: ID }) {
               ))}
             </div>
             <div className="flex items-center gap-1.5 text-[11.5px] text-muted">
-              Licences <LicenseChips licenses={person.licenses} />
+              {t('Licences')}{' '}<LicenseChips licenses={person.licenses} />
             </div>
           </div>
         </div>
         <div>
-          <SectionLabel>Today</SectionLabel>
+          <SectionLabel>{t('Today')}</SectionLabel>
           {vehicle && info ? (
             <div className="mt-1.5 rounded-xl border border-line bg-panel-2 p-2">
               <Linked onClick={() => select({ type: 'vehicle', id: vehicle.id })}>
@@ -497,20 +497,20 @@ function PersonPanel({ id }: { id: ID }) {
                     {info.stageLabel} · {info.destLabel}
                   </span>
                 </span>
-                <Pill tone={STAGE_TONE[info.stage]}>{STAGE_LABEL[info.stage]}</Pill>
+                <Pill tone={STAGE_TONE[info.stage]}>{stageLabel(info.stage)}</Pill>
               </Linked>
               <div className="mt-1 flex gap-1.5 px-1">
                 <Button size="sm" variant={locked ? 'violet' : 'secondary'} icon={locked ? <Lock size={12} /> : <Unlock size={12} />} onClick={() => commit((list) => toggleCrewLock(list, vehicle.id, id))}>
-                  {locked ? 'Pinned to vehicle' : 'Pin to vehicle'}
+                  {locked ? t('Pinned to vehicle') : t('Pin to vehicle')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => commit((list) => unassignPerson(list, id), `${fullName(person)} unassigned`)}>
-                  Unassign
+                  {t('Unassign')}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="mt-1.5 rounded-xl border border-dashed border-line-strong p-3 text-[12px] text-muted">
-              {person.status === 'available' ? 'Not on a vehicle today.' : `Unavailable (${person.status}).`}
+              {person.status === 'available' ? t('Not on a vehicle today.') : t('Unavailable ({status}).', { status: t(person.status) })}
             </div>
           )}
           {person.status === 'available' && (
@@ -519,7 +519,7 @@ function PersonPanel({ id }: { id: ID }) {
               value=""
               onChange={(e) => e.target.value && commit((list) => assignPerson(list, ctx, id, e.target.value), `${fullName(person)} moved`)}
             >
-              <option value="">{vehicle ? 'Move to another vehicle…' : 'Assign to a vehicle…'}</option>
+              <option value="">{vehicle ? t('Move to another vehicle…') : t('Assign to a vehicle…')}</option>
               {vehicles
                 .filter((v) => v.status === 'active' && v.id !== vehicle?.id)
                 .map((v) => {
@@ -527,7 +527,7 @@ function PersonPanel({ id }: { id: ID }) {
                   const full = (va?.crew.length ?? 0) >= crewCapacity(v);
                   return (
                     <option key={v.id} value={v.id} disabled={full}>
-                      {v.callsign} · {va?.crew.length ?? 0}/{crewCapacity(v)} {full ? '(full)' : ''} {canDrive(person, v) ? '· can drive' : ''}
+                      {v.callsign} · {va?.crew.length ?? 0}/{crewCapacity(v)} {full ? `(${t('full')})` : ''} {canDrive(person, v) ? `· ${t('can drive')}` : ''}
                     </option>
                   );
                 })}
@@ -535,15 +535,15 @@ function PersonPanel({ id }: { id: ID }) {
           )}
         </div>
         <div>
-          <SectionLabel>Details</SectionLabel>
+          <SectionLabel>{t('Details')}</SectionLabel>
           <div className="mt-1.5">
-            <Prop label="Role">{person.role}</Prop>
-            <Prop label="Home depot">{home?.name ?? '–'}</Prop>
-            <Prop label="Person ID" mono>
+            <Prop label={t('Role')}>{t(person.role)}</Prop>
+            <Prop label={t('Home depot')}>{home?.name ?? '–'}</Prop>
+            <Prop label={t('Person ID')} mono>
               {person.id}
             </Prop>
             {person.phone && (
-              <Prop label="Phone">
+              <Prop label={t('Phone')}>
                 <a href={`tel:${person.phone}`} className="inline-flex items-center gap-1 text-primary">
                   <Phone size={12} /> {person.phone}
                 </a>
@@ -580,13 +580,13 @@ function ProjectPanel({ id }: { id: ID }) {
   return (
     <>
       <Header
-        kicker={`Project · ${project.code}`}
+        kicker={`${t('Project')} · ${project.code}`}
         title={project.name}
         sub={project.client}
         icon={<Building2 size={13} />}
         color={project.color}
         actions={
-          <IconButton size="sm" label="Focus on map" onClick={() => useStore.getState().requestFocus({ kind: 'project', id })}>
+          <IconButton size="sm" label={t('Focus on map')} onClick={() => useStore.getState().requestFocus({ kind: 'project', id })}>
             <Crosshair size={15} />
           </IconButton>
         }
@@ -594,14 +594,14 @@ function ProjectPanel({ id }: { id: ID }) {
       <div className="space-y-4 px-4 py-3">
         <div className="flex flex-wrap gap-1.5">
           <Pill tone={project.status === 'active' ? 'success' : 'neutral'} dot>
-            {project.status}
+            {t(project.status)}
           </Pill>
-          <Pill tone={PRIORITY_TONE[project.priority]}>{project.priority} priority</Pill>
-          {nearest && <Pill>{formatDistance(nearest.d)} from {nearest.s.code}</Pill>}
+          <Pill tone={PRIORITY_TONE[project.priority]}>{project.priority}{' '}{t('priority')}</Pill>
+          {nearest && <Pill>{formatDistance(nearest.d)}{' '}{t('from')}{' '}{nearest.s.code}</Pill>}
         </div>
         <div className="rounded-xl border border-line bg-panel-2 p-3">
           <div className="flex items-center justify-between text-[12px]">
-            <span className="font-semibold">Crew today</span>
+            <span className="font-semibold">{t('Crew today')}</span>
             <span className={cx('font-semibold', crew.length >= target ? 'text-success' : 'text-warning')}>
               {crew.length} / {target || '–'}
             </span>
@@ -614,9 +614,9 @@ function ProjectPanel({ id }: { id: ID }) {
           </div>
         </div>
         <div>
-          <SectionLabel right={<span className="text-[11px] text-muted">{runs.length}</span>}>Vehicles</SectionLabel>
+          <SectionLabel right={<span className="text-[11px] text-muted">{runs.length}</span>}>{t('Vehicles')}</SectionLabel>
           <div className="mt-1 space-y-0.5">
-            {runs.length === 0 && <div className="py-2 text-[12px] text-muted">No vehicle is going here today.</div>}
+            {runs.length === 0 && <div className="py-2 text-[12px] text-muted">{t('No vehicle is going here today.')}</div>}
             {runs.map((a) => {
               const v = vehicles.find((x) => x.id === a.vehicleId)!;
               const info = runInfo(v.id, now);
@@ -627,14 +627,14 @@ function ProjectPanel({ id }: { id: ID }) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block font-semibold">
-                      {v.callsign} <span className="font-normal text-muted">· {a.crew.length} crew</span>
+                      {v.callsign} <span className="font-normal text-muted">· {a.crew.length}{' '}{t('crew')}</span>
                     </span>
                     <span className="block text-[11px] text-muted">
                       {a.departAt ?? '–'} → {a.returnAt ?? '–'}
-                      {info?.etaMin !== null && info?.stage === 'departed' ? ` · ETA ${fmtDuration(info.etaMin)}` : ''}
+                      {info?.etaMin !== null && info?.stage === 'departed' ? ` · ${t('ETA {time}', { time: fmtDuration(info.etaMin) })}` : ''}
                     </span>
                   </span>
-                  <Pill tone={STAGE_TONE[a.stage]}>{STAGE_LABEL[a.stage]}</Pill>
+                  <Pill tone={STAGE_TONE[a.stage]}>{stageLabel(a.stage)}</Pill>
                 </Linked>
               );
             })}
@@ -648,12 +648,12 @@ function ProjectPanel({ id }: { id: ID }) {
                 if (vid) commit((list) => setDestination(list, vid, { kind: 'project', projectId: id }), `${vehicles.find((v) => v.id === vid)?.callsign} → ${project.name}`);
               }}
             >
-              <option value="">Send another vehicle here…</option>
+              <option value="">{t('Send another vehicle here…')}</option>
               {freeVehicles.map((v) => {
                 const a = plan.assignments.find((x) => x.vehicleId === v.id);
                 return (
                   <option key={v.id} value={v.id}>
-                    {v.callsign} · {a?.crew.length ?? 0} crew{a?.destination ? ' (has another destination)' : ''}
+                    {v.callsign} · {a?.crew.length ?? 0}{' '}{t('crew')}{a?.destination ? ` (${t('has another destination')})` : ''}
                   </option>
                 );
               })}
@@ -661,14 +661,14 @@ function ProjectPanel({ id }: { id: ID }) {
           )}
         </div>
         <div>
-          <SectionLabel>Details</SectionLabel>
+          <SectionLabel>{t('Details')}</SectionLabel>
           <div className="mt-1.5">
-            <Prop label="Address">{project.address}</Prop>
-            <Prop label="Client">{project.client}</Prop>
-            <Prop label="Location" mono>
+            <Prop label={t('Address')}>{project.address}</Prop>
+            <Prop label={t('Client')}>{project.client}</Prop>
+            <Prop label={t('Location')} mono>
               {project.location.lat.toFixed(5)}, {project.location.lng.toFixed(5)}
             </Prop>
-            <Prop label="Project ID" mono>
+            <Prop label={t('Project ID')} mono>
               {project.id}
             </Prop>
           </div>
@@ -709,32 +709,32 @@ function SitePanel({ id }: { id: ID }) {
   return (
     <>
       <Header
-        kicker={`HQ · ${site.code}`}
+        kicker={`${t('Depot')} · ${site.code}`}
         title={site.name}
         sub={site.address}
         icon={<Warehouse size={13} />}
         color={site.color}
         actions={
-          <IconButton size="sm" label="Fly to 3D view" onClick={() => useStore.getState().requestFocus({ kind: 'site', id })}>
+          <IconButton size="sm" label={t('Fly to 3D view')} onClick={() => useStore.getState().requestFocus({ kind: 'site', id })}>
             <Navigation size={15} />
           </IconButton>
         }
       />
       <div className="space-y-4 px-4 py-3">
         <div className="grid grid-cols-3 gap-2">
-          <Stat label="In yard" value={`${inYard.length}/${home.length}`} />
-          <Stat label="Unassigned" value={idle.length} />
-          <Stat label="Off today" value={off.length} />
+          <Stat label={t('In yard')} value={`${inYard.length}/${home.length}`} />
+          <Stat label={t('Unassigned')} value={idle.length} />
+          <Stat label={t('Off today')} value={off.length} />
         </div>
         <div>
-          <SectionLabel>Vehicles based here</SectionLabel>
+          <SectionLabel>{t('Vehicles based here')}</SectionLabel>
           <div className="mt-1 space-y-0.5">
             {home.map((v) => {
               const info = runInfo(v.id, now);
               return (
                 <Linked key={v.id} onClick={() => select({ type: 'vehicle', id: v.id }, { focus: true })}>
                   <span className="mono w-14 shrink-0 whitespace-nowrap font-semibold">{v.callsign}</span>
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{info?.assignment?.crew.length ? info.destLabel : v.status === 'active' ? 'Unassigned' : v.status}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{info?.assignment?.crew.length ? info.destLabel : v.status === 'active' ? t('Unassigned') : t(v.status === 'maintenance' ? 'In maintenance' : 'Inactive')}</span>
                   {info && <Pill tone={STAGE_TONE[info.stage]}>{info.stageLabel}</Pill>}
                 </Linked>
               );
@@ -743,7 +743,7 @@ function SitePanel({ id }: { id: ID }) {
         </div>
         {idle.length > 0 && (
           <div>
-            <SectionLabel>Waiting for an assignment</SectionLabel>
+            <SectionLabel>{t('Waiting for an assignment')}</SectionLabel>
             <div className="mt-1.5 flex flex-wrap gap-1">
               {idle.map((p) => (
                 <button key={p.id} onClick={() => select({ type: 'person', id: p.id })} className="flex items-center gap-1.5 rounded-full bg-panel-3 py-0.5 pl-0.5 pr-2 text-[11.5px] font-medium hover:bg-panel-2">
@@ -754,18 +754,18 @@ function SitePanel({ id }: { id: ID }) {
           </div>
         )}
         <div>
-          <SectionLabel>Building (true scale)</SectionLabel>
+          <SectionLabel>{t('Building (true scale)')}</SectionLabel>
           <div className="mt-1.5">
-            <Prop label="Footprint">{area ? `${Math.round(area).toLocaleString('de-DE')} m²` : '–'}</Prop>
-            <Prop label="Height">{geo?.heightM ? `${geo.heightM} m` : '–'}</Prop>
-            <Prop label="Yard bays">{geo?.yard.length ?? 0}</Prop>
-            <Prop label="Geofence">{site.geofenceRadiusM} m radius</Prop>
-            <Prop label="Address point" mono>
+            <Prop label={t('Footprint')}>{area ? `${Math.round(area).toLocaleString('de-DE')} m²` : '–'}</Prop>
+            <Prop label={t('Height')}>{geo?.heightM ? `${geo.heightM} m` : '–'}</Prop>
+            <Prop label={t('Yard bays')}>{geo?.yard.length ?? 0}</Prop>
+            <Prop label={t('Geofence')}>{site.geofenceRadiusM}{' '}{t('m radius')}</Prop>
+            <Prop label={t('Address point')} mono>
               {site.location.lat.toFixed(5)}, {site.location.lng.toFixed(5)}
             </Prop>
           </div>
           <p className="mt-2 text-[11px] leading-snug text-subtle">
-            Footprint & height from OpenStreetMap / Microsoft building data via Overture Maps; address point from the Hessen address register.
+            {t('Footprint & height from OpenStreetMap / Microsoft building data via Overture Maps; address point from the Hessen address register.')}
           </p>
         </div>
       </div>

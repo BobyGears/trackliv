@@ -1,7 +1,5 @@
 import {
   ARRIVE_RADIUS_M,
-  STAGE_LABEL,
-  destinationLabel,
   destinationLocation,
   isAtDepot,
   type Assignment,
@@ -25,6 +23,8 @@ import {
   vehicleMarkerEl,
 } from './markers';
 import { GERMANY_BOUNDS, OFFLINE_LAYERS, PALETTE, applyTheme, buildStyle, omtLayers } from './style';
+import { destLabel, stageLabel } from '../lib/derived';
+import { t as tr } from '../lib/i18n';
 
 const OMT_LAYERS = omtLayers(PALETTE.light).map((l) => ({ id: l.id, label: l.type === 'symbol' }));
 
@@ -102,7 +102,7 @@ class MapController {
       if (++omtErrors >= 3) {
         this.omtFailed = true;
         this.applyLayers(useStore.getState());
-        useStore.getState().toast({ kind: 'warning', title: 'Street map unavailable', detail: 'Showing the offline Rhein-Main map instead.' });
+        useStore.getState().toast({ kind: 'warning', title: tr('Street map unavailable'), detail: tr('Showing the offline Rhein-Main map instead.') });
       }
     });
   }
@@ -225,6 +225,7 @@ class MapController {
         if (st.focus && st.focus !== p.focus) this.focus(st.focus);
         if (st.mapPick !== p.mapPick) map.getCanvas().style.cursor = st.mapPick ? 'crosshair' : '';
         if (st.layers !== p.layers) this.applyLayers(st);
+        if (st.lang !== p.lang) this.syncAll();
         if (st.is3d !== p.is3d) map.easeTo({ pitch: st.is3d ? 55 : 0, duration: 700 });
         if (
           st.telemetry !== p.telemetry ||
@@ -482,7 +483,7 @@ class MapController {
       const home = vehicles.filter((v) => st.telemetry[v.id] && isAtDepot(st.telemetry[v.id], st.sites)).length;
       renderSiteMarker(this.hqCluster.el, {
         code: st.sites.map((s) => s.code).join(' · '),
-        name: st.sites.length > 1 ? 'DTE Lager' : (st.sites[0]?.name ?? 'DTE'),
+        name: st.sites.length > 1 ? tr('DTE depots') : (st.sites[0]?.name ?? 'DTE'),
         color: '#1f4fd6',
         vehiclesHome: home,
         vehiclesTotal: vehicles.length,
@@ -608,7 +609,7 @@ class MapController {
         selected,
         label,
         lifted: zoom >= 15.2,
-        status: a?.crew.length ? `${STAGE_LABEL[stage]} · ${destinationLabel(a.destination, st.projects)}` : v.status === 'active' ? 'Unassigned' : v.status,
+        status: a?.crew.length ? `${stageLabel(stage)} · ${destLabel(a.destination, st.projects)}` : v.status === 'active' ? tr('Unassigned') : tr(v.status === 'maintenance' ? 'In maintenance' : 'Inactive'),
       });
     }
     for (const [id, m] of this.vehicleMarkers) {

@@ -21,6 +21,7 @@ import {
 } from '@trackliv/core';
 import { create } from 'zustand';
 import { ApiError, UNAUTHORIZED_EVENT, api, authApi, openStream, type ClockSnapshot, type SiteGeo } from './api';
+import { getLang, setLang as setI18nLang, t, type Lang } from './i18n';
 
 export type ObjectType = 'vehicle' | 'person' | 'project' | 'site';
 export interface Selection {
@@ -82,6 +83,7 @@ interface State {
   selection: Selection | null;
   hover: Selection | null;
   theme: Theme;
+  lang: Lang;
   paletteOpen: boolean;
   eventsOpen: boolean;
   focus: FocusRequest | null;
@@ -106,6 +108,7 @@ interface Actions {
   select(s: Selection | null, opts?: { focus?: boolean }): void;
   setHover(s: Selection | null): void;
   toggleTheme(): void;
+  setLang(lang: Lang): void;
   setPalette(open: boolean): void;
   setEventsOpen(open: boolean): void;
   requestFocus(f: Omit<FocusRequest, 'nonce'> | FocusRequest): void;
@@ -197,6 +200,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   selection: null,
   hover: null,
   theme: loadTheme(),
+  lang: getLang(),
   paletteOpen: false,
   eventsOpen: false,
   focus: null,
@@ -309,6 +313,10 @@ export const useStore = create<State & Actions>()((set, get) => ({
     if (selection && opts?.focus) get().requestFocus({ kind: selection.type, id: selection.id } as FocusRequest);
   },
   setHover: (hover) => set({ hover }),
+  setLang: (lang) => {
+    setI18nLang(lang);
+    set({ lang });
+  },
   toggleTheme: () => {
     const theme = get().theme === 'light' ? 'dark' : 'light';
     try {
@@ -369,7 +377,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
             set({ confirmed: base });
             continue;
           }
-          get().toast({ kind: 'error', title: 'Could not save the plan', detail: e instanceof Error ? e.message : String(e) });
+          get().toast({ kind: 'error', title: t('Could not save the plan'), detail: e instanceof Error ? e.message : String(e) });
           set((s) => ({ plan: s.confirmed }));
           break;
         }
@@ -406,7 +414,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       const plan = await api.dispatch(get().date, vehicleId);
       set({ confirmed: plan, plan });
     } catch (e) {
-      get().toast({ kind: 'error', title: 'Dispatch failed', detail: String(e) });
+      get().toast({ kind: 'error', title: t('Dispatch failed'), detail: String(e) });
     }
   },
   async recall(vehicleId) {
@@ -414,7 +422,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       const plan = await api.recall(get().date, vehicleId);
       set({ confirmed: plan, plan });
     } catch (e) {
-      get().toast({ kind: 'error', title: 'Recall failed', detail: String(e) });
+      get().toast({ kind: 'error', title: t('Recall failed'), detail: String(e) });
     }
   },
 
@@ -437,9 +445,9 @@ export const useStore = create<State & Actions>()((set, get) => ({
       set({ scenario: null, scenarioOptions: { ...get().scenarioOptions, seed: randomSeed() } });
       get().toast({
         kind: 'success',
-        title: 'Randomized plan applied',
-        detail: `${sc.stats.peopleAssigned} people on ${sc.stats.vehiclesStaffed} vehicles · ${sc.stats.projectsCovered} projects`,
-        action: { label: 'Undo', run: () => get().undo() },
+        title: t('Randomized plan applied'),
+        detail: t('{p} people on {v} vehicles · {pr} projects', { p: sc.stats.peopleAssigned, v: sc.stats.vehiclesStaffed, pr: sc.stats.projectsCovered }),
+        action: { label: t('Undo'), run: () => get().undo() },
       });
     }
   },
@@ -455,7 +463,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       const clock = await api.simSpeed(speed);
       set({ clock });
     } catch (e) {
-      get().toast({ kind: 'error', title: 'Could not change simulation speed', detail: String(e) });
+      get().toast({ kind: 'error', title: t('Could not change simulation speed'), detail: String(e) });
     }
   },
 
@@ -466,7 +474,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
       set({ date, plan, confirmed: plan, history: [], future: [], scenario: null, pending: 0 });
       void get().refreshRoutes();
     } catch (e) {
-      get().toast({ kind: 'error', title: 'Could not load plan', detail: String(e) });
+      get().toast({ kind: 'error', title: t('Could not load plan'), detail: String(e) });
     }
   },
 
@@ -483,9 +491,9 @@ export const useStore = create<State & Actions>()((set, get) => ({
           }),
         `Copied plan from ${from}`,
       );
-      if (ok) get().toast({ kind: 'success', title: `Copied crews and destinations from ${from}`, action: { label: 'Undo', run: () => get().undo() } });
+      if (ok) get().toast({ kind: 'success', title: t('Copied crews and destinations from {day}', { day: from }), action: { label: t('Undo'), run: () => get().undo() } });
     } catch (e) {
-      get().toast({ kind: 'error', title: 'Could not copy plan', detail: String(e) });
+      get().toast({ kind: 'error', title: t('Could not copy plan'), detail: String(e) });
     }
   },
 

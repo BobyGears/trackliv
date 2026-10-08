@@ -1,10 +1,11 @@
-import { STAGES, STAGE_LABEL, type Stage } from '@trackliv/core';
+import { STAGES, type Stage } from '@trackliv/core';
 import { Check, Flag, Home, MapPin, Truck, Undo2, Warehouse } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { runInfo, useOpsNow } from '../lib/derived';
+import { runInfo, useOpsNow, stageLabel } from '../lib/derived';
 import { STAGE_TONE, TONE_HEX, fmtDuration, fmtTime, opsTime } from '../lib/format';
 import { useStore } from '../lib/store';
 import { AvatarStack, Panel, Pill, cx } from './kit';
+import { t } from '../lib/i18n';
 
 const ICONS: Record<Stage, ReactNode> = {
   planned: <Warehouse size={14} />,
@@ -15,11 +16,21 @@ const ICONS: Record<Stage, ReactNode> = {
 };
 
 const STEP_LABEL: Record<Stage, string> = {
-  planned: 'Crew ready',
-  departed: 'Departed',
-  on_site: 'On site',
-  returning: 'Returning',
-  completed: 'Back at HQ',
+  get planned() {
+    return t('Crew ready');
+  },
+  get departed() {
+    return t('Departed');
+  },
+  get on_site() {
+    return t('On site');
+  },
+  get returning() {
+    return t('Returning');
+  },
+  get completed() {
+    return t('Back at HQ');
+  },
 };
 
 function Stepper({ current, times, counts }: { current?: Stage; times?: Partial<Record<Stage, string | undefined>>; counts?: Record<Stage, number> }) {
@@ -42,7 +53,7 @@ function Stepper({ current, times, counts }: { current?: Stage; times?: Partial<
               </div>
               <div className={cx('h-0.5 flex-1', i === STAGES.length - 1 ? 'opacity-0' : done ? 'bg-primary' : 'bg-line-strong')} />
             </div>
-            <div className={cx('mt-1.5 text-center text-[11.5px] font-semibold', now ? 'text-ink' : 'text-ink-2')}>{counts ? STAGE_LABEL[s] : STEP_LABEL[s]}</div>
+            <div className={cx('mt-1.5 text-center text-[11.5px] font-semibold', now ? 'text-ink' : 'text-ink-2')}>{counts ? stageLabel(s) : STEP_LABEL[s]}</div>
             {times && <div className="mono text-center text-[10.5px] text-muted">{times[s] ?? '–'}</div>}
           </div>
         );
@@ -72,15 +83,15 @@ export function TrackingCard() {
       <Panel className="pointer-events-auto absolute bottom-3 left-3 z-20 w-[min(640px,calc(100%-560px))] min-w-[460px] px-4 pb-3.5 pt-3">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold">
-            <Flag size={14} className="text-primary" /> Today’s runs
-            <span className="text-[11.5px] font-normal text-muted">{crewed.length} vehicles with crew</span>
+            <Flag size={14} className="text-primary" />{' '}{t('Today’s runs')}
+            <span className="text-[11.5px] font-normal text-muted">{crewed.length}{' '}{t('vehicles with crew')}</span>
           </div>
           {next && nextV ? (
             <button className="text-[11.5px] text-muted hover:text-primary" onClick={() => select({ type: 'vehicle', id: nextV.id }, { focus: true })}>
-              Next departure <span className="mono font-semibold text-ink">{next.departAt}</span> · {nextV.callsign}
+              {t('Next departure')}{' '}<span className="mono font-semibold text-ink">{next.departAt}</span> · {nextV.callsign}
             </button>
           ) : (
-            <span className="text-[11.5px] text-muted">Select a vehicle to track its run</span>
+            <span className="text-[11.5px] text-muted">{t('Select a vehicle to track its run')}</span>
           )}
         </div>
         <Stepper counts={counts} />
@@ -91,12 +102,12 @@ export function TrackingCard() {
   const a = info.assignment;
   const planned = (hhmm?: string) => (hhmm ? `${hhmm}` : undefined);
   const times: Partial<Record<Stage, string | undefined>> = {
-    planned: a.departAt ? `dep ${a.departAt}` : undefined,
+    planned: a.departAt ? t('dep {time}', { time: a.departAt }) : undefined,
     departed: a.stageTimes.departed ? fmtTime(a.stageTimes.departed) : planned(a.departAt),
     on_site: a.stageTimes.on_site
       ? fmtTime(a.stageTimes.on_site)
       : info.stage === 'departed' && info.etaMin !== null
-        ? `ETA ${fmtTime(now + info.etaMin * 60000)}`
+        ? t('ETA {time}', { time: fmtTime(now + info.etaMin * 60000) })
         : undefined,
     returning: a.stageTimes.returning ? fmtTime(a.stageTimes.returning) : planned(a.returnAt),
     completed: a.stageTimes.completed ? fmtTime(a.stageTimes.completed) : undefined,
@@ -110,12 +121,12 @@ export function TrackingCard() {
       <div className="min-w-0 flex-1">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold">
-            Run tracking
+            {t('Run tracking')}
             <span className="mono text-[11px] font-medium text-muted">
               RUN-{date.replaceAll('-', '').slice(2)}-{info.vehicle.callsign}
             </span>
           </div>
-          {late > 0 ? <Pill tone="danger">{late} min late</Pill> : <Pill tone={STAGE_TONE[info.stage]}>{info.stageLabel}</Pill>}
+          {late > 0 ? <Pill tone="danger">{late}{' '}{t('min late')}</Pill> : <Pill tone={STAGE_TONE[info.stage]}>{info.stageLabel}</Pill>}
         </div>
         <Stepper current={info.stage} times={times} />
       </div>
@@ -128,7 +139,7 @@ export function TrackingCard() {
             <div className="truncate font-semibold">
               {info.vehicle.callsign} → {info.destLabel}
             </div>
-            <div className="truncate text-[11px] text-muted">{project?.address ?? (a.destination?.kind === 'custom' ? a.destination.address ?? 'Custom destination' : '')}</div>
+            <div className="truncate text-[11px] text-muted">{project?.address ?? (a.destination?.kind === 'custom' ? a.destination.address ?? t('Custom destination') : '')}</div>
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between">

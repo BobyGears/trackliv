@@ -1,5 +1,7 @@
 // DOM builders for MapLibre HTML markers (kept framework-free for speed).
 
+import { t } from '../lib/i18n';
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const ICON_WAREHOUSE =
@@ -20,7 +22,7 @@ export function renderSiteMarker(
     <div class="badge" style="background:${s.color}">${ICON_WAREHOUSE}</div>
     <div style="line-height:1.2">
       <div style="font-weight:700;font-size:11.5px">${esc(s.name)} <span class="mono" style="color:var(--muted);font-weight:600;font-size:10px">${esc(s.code)}</span></div>
-      <div style="color:var(--muted);font-size:10.5px">${s.vehiclesHome}/${s.vehiclesTotal} vehicles in yard · ${s.idle} crew unassigned</div>
+      <div style="color:var(--muted);font-size:10.5px">${esc(t('{n}/{total} vehicles in yard · {idle} crew unassigned', { n: s.vehiclesHome, total: s.vehiclesTotal, idle: s.idle }))}</div>
     </div>`;
 }
 
@@ -41,9 +43,11 @@ export function renderProjectMarker(
   const meta =
     p.vehicles === 0
       ? p.status === 'active'
-        ? 'no crew today'
-        : p.status
-      : `${p.crew} crew · ${p.onSite ? `${p.onSite} on site` : `${p.enRoute} en route`}`;
+        ? t('no crew today')
+        : t(p.status)
+      : p.onSite
+        ? t('{crew} crew · {n} on site', { crew: p.crew, n: p.onSite })
+        : t('{crew} crew · {n} en route', { crew: p.crew, n: p.enRoute });
   chip.innerHTML = `
     <span class="dot" style="background:${p.color}">${p.crew || ''}</span>
     ${p.compact ? '' : `<span>${esc(p.name)}</span><span class="meta">${esc(meta)}</span>`}`;

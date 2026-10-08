@@ -1,4 +1,5 @@
 import type { Priority, Stage } from '@trackliv/core';
+import { t, locale } from './i18n';
 
 /** All operational times are shown in the depots' time zone, whatever the browser's zone is. */
 export const OPS_TZ = 'Europe/Berlin';
@@ -53,17 +54,17 @@ export function addDays(date: string, n: number): string {
 }
 
 export const fmtDate = (iso: string) =>
-  new Date(`${iso}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+  new Date(`${iso}T12:00:00`).toLocaleDateString(locale(), { weekday: 'short', day: '2-digit', month: 'short' });
 
 export function fmtAgo(iso: string | undefined, now: number): string {
-  if (!iso) return 'never';
+  if (!iso) return t('never');
   const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
-  if (s < 10) return 'just now';
-  if (s < 60) return `${s}s ago`;
+  if (s < 10) return t('just now');
+  if (s < 60) return t('{s}s ago', { s });
   const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
+  if (m < 60) return t('{m} min ago', { m });
   const h = Math.floor(m / 60);
-  return `${h} h ${m % 60} min ago`;
+  return t('{h} h {m} min ago', { h, m: m % 60 });
 }
 
 export function fmtDuration(min: number): string {

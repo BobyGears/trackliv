@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useKpis } from '../lib/derived';
 import { useStore } from '../lib/store';
 import { cx, Panel } from './kit';
+import { t, plural } from '../lib/i18n';
 
 function Kpi({
   icon,
@@ -57,42 +58,42 @@ export function KpiCards() {
       <Kpi
         icon={<Users size={15} />}
         tint="#2f6bff"
-        label="Crew deployed"
+        label={t('Crew deployed')}
         value={k.crewAssigned}
         total={k.crewAvailable}
-        sub={k.crewAvailable - k.crewAssigned > 0 ? `${k.crewAvailable - k.crewAssigned} unassigned · ${k.crewUnavailable} off` : `everyone assigned · ${k.crewUnavailable} off`}
+        sub={k.crewAvailable - k.crewAssigned > 0 ? t('{n} unassigned · {off} off', { n: k.crewAvailable - k.crewAssigned, off: k.crewUnavailable }) : t('everyone assigned · {off} off', { off: k.crewUnavailable })}
         subTone={k.crewAvailable - k.crewAssigned > 0 ? 'neutral' : 'good'}
         onClick={() => setView('dispatch')}
       />
       <Kpi
         icon={<Truck size={15} />}
         tint="#12a150"
-        label="Vehicles out"
+        label={t('Vehicles out')}
         value={k.vehiclesOut}
         total={k.vehiclesTotal}
-        sub={`${k.enRoute} en route · ${k.onSite} on site`}
+        sub={t('{a} en route · {b} on site', { a: k.enRoute, b: k.onSite })}
       />
       <Kpi
         icon={<Clock3 size={15} />}
         tint="#d9820b"
-        label="On-time departures"
+        label={t('On-time departures')}
         value={k.onTimePct === null ? '–' : `${k.onTimePct}%`}
-        sub={k.late ? `${k.late} vehicle${k.late > 1 ? 's' : ''} late to leave` : `${k.departedCount} departed today`}
+        sub={k.late ? t(plural(k.late, '{n} vehicle late to leave', '{n} vehicles late to leave'), { n: k.late }) : t('{n} departed today', { n: k.departedCount })}
         subTone={k.late ? 'bad' : 'good'}
         onClick={() => setView('schedule')}
       />
       <Kpi
         icon={<Building2 size={15} />}
         tint="#7c5cff"
-        label="Projects covered"
+        label={t('Projects covered')}
         value={k.projectsCovered}
         total={k.projectsActive}
         sub={
           k.issues.filter((i) => i.severity !== 'info').length
-            ? `${k.issues.filter((i) => i.severity !== 'info').length} plan issue(s)`
+            ? t('{n} plan issue(s)', { n: k.issues.filter((i) => i.severity !== 'info').length })
             : k.projectsActive - k.projectsCovered > 0
-              ? `${k.projectsActive - k.projectsCovered} without crew today`
-              : 'all active projects staffed'
+              ? t('{n} without crew today', { n: k.projectsActive - k.projectsCovered })
+              : t('all active projects staffed')
         }
         subTone={k.issues.some((i) => i.severity === 'error') ? 'bad' : k.projectsActive - k.projectsCovered > 0 ? 'neutral' : 'good'}
         onClick={() => setView('dispatch')}

@@ -18,12 +18,10 @@ import {
   canDrive,
   clearUnlocked,
   crewCapacity,
-  destinationLabel,
   fullName,
   pinGroupToTask,
   setDestination,
   setTimes,
-  STAGE_LABEL,
   setVehicleLock,
   toggleCrewLock,
   unassignPerson,
@@ -62,7 +60,8 @@ import { TimeInput } from './ObjectPanel';
 import { DateNav } from './DateNav';
 import { RandomizePanel } from './RandomizePanel';
 import { Avatar, Button, IconButton, LicenseChips, Panel, Pill, Segmented, cx } from './kit';
-import { vehicleDesc } from '../lib/derived';
+import { vehicleDesc, destLabel, stageLabel } from '../lib/derived';
+import { t, tx } from '../lib/i18n';
 
 type RosterFilter = 'all' | 'unassigned' | 'assigned' | 'off';
 
@@ -115,11 +114,11 @@ export function DispatchBoard() {
     const v = vehicles.find((x) => x.id === vid);
     if (!v) return;
     if (v.status !== 'active') {
-      useStore.getState().toast({ kind: 'warning', title: `${v.callsign} is in ${v.status}` });
+      useStore.getState().toast({ kind: 'warning', title: t('{v} is in {status}', { v: v.callsign, status: t(v.status) }) });
       return;
     }
     if (p.status !== 'available') {
-      useStore.getState().toast({ kind: 'warning', title: `${fullName(p)} is ${p.status}` });
+      useStore.getState().toast({ kind: 'warning', title: t('{name} is {status}', { name: fullName(p), status: t(p.status) }) });
       return;
     }
     const fromVid = plan.assignments.find((x) => x.crew.includes(pid))?.vehicleId;
@@ -130,8 +129,8 @@ export function DispatchBoard() {
       useStore.getState().toast({
         kind: 'success',
         title: `${fullName(p)} → ${v.callsign}`,
-        detail: from ? `moved from ${from.callsign}` : undefined,
-        action: { label: 'Undo', run: () => useStore.getState().undo() },
+        detail: from ? t('moved from {v}', { v: from.callsign }) : undefined,
+        action: { label: t('Undo'), run: () => useStore.getState().undo() },
       });
   };
 
@@ -143,29 +142,29 @@ export function DispatchBoard() {
           <div className="border-b border-line px-4 pb-2 pt-2.5">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-bold leading-tight">{scenario ? 'Scenario preview' : 'Dispatch board'}</div>
+                <div className="text-[15px] font-bold leading-tight">{scenario ? t('Scenario preview') : t('Dispatch board')}</div>
                 <div className="truncate text-[11.5px] text-muted">
-                  {scenario ? 'Proposed by Randomize – nothing is saved until you apply it' : 'Drag people onto vehicles · click a destination to change it · 🔒 pins survive Randomize'}
+                  {scenario ? t('Proposed by Randomize – nothing is saved until you apply it') : t('Drag people onto vehicles · click a destination to change it · 🔒 pins survive Randomize')}
                 </div>
               </div>
               {!scenario && (
                 <>
-                  <IconButton label="Undo (⌘Z)" disabled={!history.length} onClick={() => useStore.getState().undo()}>
+                  <IconButton label={t('Undo (⌘Z)')} disabled={!history.length} onClick={() => useStore.getState().undo()}>
                     <Undo2 size={15} />
                   </IconButton>
-                  <IconButton label="Redo (⌘⇧Z)" disabled={!future.length} onClick={() => useStore.getState().redo()}>
+                  <IconButton label={t('Redo (⌘⇧Z)')} disabled={!future.length} onClick={() => useStore.getState().redo()}>
                     <Redo2 size={15} />
                   </IconButton>
                   <Button
                     size="sm"
                     icon={<Eraser size={13} />}
                     onClick={() => commit((list) => clearUnlocked(list), 'Cleared all unpinned assignments')}
-                    title="Remove everyone and every destination that is not pinned (vehicles on the road are kept)"
+                    title={t('Remove everyone and every destination that is not pinned (vehicles on the road are kept)')}
                   >
-                    Clear unpinned
+                    {t('Clear unpinned')}
                   </Button>
                   <Button size="sm" variant="violet" icon={<Shuffle size={13} />} onClick={() => useStore.getState().previewRandomize({ siteId: siteFilter === 'all' ? undefined : siteFilter })}>
-                    Randomize
+                    {t('Randomize')}
                   </Button>
                 </>
               )}
@@ -174,17 +173,17 @@ export function DispatchBoard() {
               {!scenario && <DateNav />}
               {!scenario && (
                 <div className="flex gap-1">
-                  {errors > 0 && <Pill tone="danger">{errors} error{errors > 1 ? 's' : ''}</Pill>}
+                  {errors > 0 && <Pill tone="danger">{errors}{' '}{t('error')}{errors > 1 ? 's' : ''}</Pill>}
                   {warnings > 0 && (
-                    <span title={issues.filter((i) => i.severity === 'warning').map((i) => i.message).join('\n')}>
+                    <span title={issues.filter((i) => i.severity === 'warning').map((i) => tx(i.message)).join('\n')}>
                       <Pill tone="warning">
-                        <AlertTriangle size={11} /> {warnings} warning{warnings > 1 ? 's' : ''}
+                        <AlertTriangle size={11} /> {warnings}{' '}{t('warning')}{warnings > 1 ? 's' : ''}
                       </Pill>
                     </span>
                   )}
                   {errors + warnings === 0 && (
                     <Pill tone="success">
-                      <Check size={11} /> Plan OK
+                      <Check size={11} />{' '}{t('Plan OK')}
                     </Pill>
                   )}
                 </div>
@@ -194,7 +193,7 @@ export function DispatchBoard() {
                 size="sm"
                 value={siteFilter}
                 onChange={setSiteFilter}
-                options={[{ value: 'all', label: 'All depots' }, ...sites.map((s) => ({ value: s.id, label: s.code }))]}
+                options={[{ value: 'all', label: t('All depots') }, ...sites.map((s) => ({ value: s.id, label: s.code }))]}
               />
             </div>
           </div>
@@ -210,7 +209,7 @@ export function DispatchBoard() {
                       <span className="size-2 rounded-full" style={{ background: site.color }} />
                       <span className="text-[12px] font-semibold">{site.name}</span>
                       <span className="mono text-[11px] text-muted">{site.code}</span>
-                      <span className="text-[11px] text-subtle">· {vs.length} vehicles</span>
+                      <span className="text-[11px] text-subtle">· {vs.length}{' '}{t('vehicles')}</span>
                     </div>
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
                       {vs.map((v) => (
@@ -226,7 +225,7 @@ export function DispatchBoard() {
                   </div>
                 );
               })}
-            {projects.length === 0 && <div className="text-muted">No projects yet.</div>}
+            {projects.length === 0 && <div className="text-muted">{t('No projects yet.')}</div>}
           </div>
         </Panel>
         {scenario && <RandomizePanel />}
@@ -263,7 +262,7 @@ function Roster({ siteFilter, onGroup }: { siteFilter: string; onGroup: () => vo
   const needle = q.trim().toLowerCase();
   const list = people
     .filter((p) => siteFilter === 'all' || p.homeSiteId === siteFilter)
-    .filter((p) => !needle || `${p.firstName} ${p.lastName} ${p.role} ${p.licenses.join(' ')}`.toLowerCase().includes(needle))
+    .filter((p) => !needle || `${p.firstName} ${p.lastName} ${t(p.role)} ${p.licenses.join(' ')}`.toLowerCase().includes(needle))
     .filter((p) =>
       filter === 'all' ? true : filter === 'off' ? p.status !== 'available' : filter === 'assigned' ? where.has(p.id) : p.status === 'available' && !where.has(p.id),
     );
@@ -277,12 +276,12 @@ function Roster({ siteFilter, onGroup }: { siteFilter: string; onGroup: () => vo
       <div className="border-b border-line px-3 pb-2 pt-2.5">
         <div className="flex items-center gap-2">
           <Users size={15} className="text-primary" />
-          <span className="text-[14px] font-bold">Crew roster</span>
-          <span className="text-[11.5px] text-muted">{people.length} people</span>
+          <span className="text-[14px] font-bold">{t('Crew roster')}</span>
+          <span className="text-[11.5px] text-muted">{people.length}{' '}{t('people')}</span>
         </div>
         <div className="mt-2 flex h-8 items-center gap-1.5 rounded-lg bg-panel-3 px-2">
           <Search size={13} className="text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, role, licence…" className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-subtle" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('Name, role, licence…')} className="w-full bg-transparent text-[12.5px] outline-none placeholder:text-subtle" />
         </div>
         <div className="mt-2">
           <Segmented<RosterFilter>
@@ -290,10 +289,10 @@ function Roster({ siteFilter, onGroup }: { siteFilter: string; onGroup: () => vo
             value={filter}
             onChange={setFilter}
             options={[
-              { value: 'all', label: 'All' },
-              { value: 'unassigned', label: `Free ${counts.unassigned}` },
-              { value: 'assigned', label: 'On vehicle' },
-              { value: 'off', label: `Off ${counts.off}` },
+              { value: 'all', label: t('All') },
+              { value: 'unassigned', label: t('Free {n}', { n: counts.unassigned }) },
+              { value: 'assigned', label: t('On vehicle') },
+              { value: 'off', label: t('Off {n}', { n: counts.off }) },
             ]}
           />
         </div>
@@ -316,24 +315,24 @@ function Roster({ siteFilter, onGroup }: { siteFilter: string; onGroup: () => vo
               </div>
             );
           })}
-        {list.length === 0 && <div className="px-2 py-6 text-center text-[12px] text-muted">Nobody matches.</div>}
+        {list.length === 0 && <div className="px-2 py-6 text-center text-[12px] text-muted">{t('Nobody matches.')}</div>}
       </div>
       {sel.length > 0 && !scenario ? (
         <div className="border-t border-line bg-panel-2 p-2.5">
           <div className="mb-2 flex items-center justify-between text-[12px]">
-            <span className="font-semibold">{sel.length} selected</span>
+            <span className="font-semibold">{sel.length}{' '}{t('selected')}</span>
             <button className="text-muted hover:text-ink" onClick={() => setSel([])}>
-              Clear
+              {t('Clear')}
             </button>
           </div>
           <Button variant="primary" className="w-full" icon={<Send size={13} />} onClick={onGroup} disabled={sel.length > 4}>
-            {sel.length > 4 ? 'Max. 4 people per vehicle' : 'Send to a task & pin'}
+            {sel.length > 4 ? t('Max. 4 people per vehicle') : t('Send to a task & pin')}
           </Button>
-          <p className="mt-1.5 text-[11px] leading-snug text-muted">They go together on one vehicle and stay there when you randomize everyone else.</p>
+          <p className="mt-1.5 text-[11px] leading-snug text-muted">{t('They go together on one vehicle and stay there when you randomize everyone else.')}</p>
         </div>
       ) : (
         <div className="border-t border-line px-3 py-2 text-[11px] leading-snug text-muted">
-          Tick people to send them to a task together. Drag a person onto a vehicle, or back here to unassign.
+          {t('Tick people to send them to a task together. Drag a person onto a vehicle, or back here to unassign.')}
         </div>
       )}
     </Panel>
@@ -365,21 +364,21 @@ function RosterRow({ person, assignment, selected, disabled }: { person: Person;
         disabled={off || disabled}
         onChange={() => toggle(person.id)}
         className="size-3.5 shrink-0 accent-[var(--primary)]"
-        aria-label={`Select ${fullName(person)}`}
+        aria-label={t('Select {name}', { name: fullName(person) })}
       />
       <span {...listeners} {...attributes} data-testid={`drag-${person.id}`} className={cx('flex min-w-0 flex-1 items-center gap-2', !off && !disabled && 'cursor-grab active:cursor-grabbing')}>
         <Avatar person={person} size={26} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[12.5px] font-semibold">{fullName(person)}</span>
           <span className="flex items-center gap-1 text-[10.5px] text-muted">
-            {person.role} <LicenseChips licenses={person.licenses} />
+            {t(person.role)} <LicenseChips licenses={person.licenses} />
           </span>
         </span>
       </span>
       {off ? (
-        <Pill tone="warning">{person.status}</Pill>
+        <Pill tone="warning">{t(person.status)}</Pill>
       ) : v ? (
-        <button onClick={() => select({ type: 'vehicle', id: v.id })} className="flex items-center gap-1 rounded-md bg-panel-3 px-1.5 py-0.5 text-[11px] font-semibold hover:bg-panel-2" title={`On ${v.callsign}`}>
+        <button onClick={() => select({ type: 'vehicle', id: v.id })} className="flex items-center gap-1 rounded-md bg-panel-3 px-1.5 py-0.5 text-[11px] font-semibold hover:bg-panel-2" title={t('On {v}', { v: v.callsign })}>
           {locked && <Lock size={10} className="text-violet" />}
           <span className="mono">{v.callsign}</span>
         </button>
@@ -434,7 +433,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
             full ? 'bg-danger' : 'bg-primary',
           )}
         >
-          {full ? `${vehicle.callsign} is full (${cap} seats)` : `Move ${dragged!.firstName} to ${vehicle.callsign}`}
+          {full ? t('{v} is full ({n} seats)', { v: vehicle.callsign, n: cap }) : t('Move {name} to {v}', { name: dragged!.firstName, v: vehicle.callsign })}
         </div>
       )}
       <div className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
@@ -450,14 +449,14 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
           </span>
         </button>
         {inactive ? (
-          <Pill tone="warning">{vehicle.status}</Pill>
+          <Pill tone="warning">{t(vehicle.status)}</Pill>
         ) : (
-          <Pill tone={STAGE_TONE[a?.stage ?? 'planned']}>{STAGE_LABEL[a?.stage ?? 'planned']}</Pill>
+          <Pill tone={STAGE_TONE[a?.stage ?? 'planned']}>{stageLabel(a?.stage ?? 'planned')}</Pill>
         )}
         {!readOnly && !inactive && (
           <IconButton
             size="sm"
-            label={fullyLocked ? 'Unpin vehicle' : 'Pin crew & destination'}
+            label={fullyLocked ? t('Unpin vehicle') : t('Pin crew & destination')}
             active={fullyLocked}
             disabled={!a?.crew.length}
             onClick={() => commit((list) => setVehicleLock(list, vehicle.id, !fullyLocked))}
@@ -479,7 +478,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
                   isOver ? 'border-primary text-primary' : 'border-line-strong text-subtle',
                 )}
               >
-                <UserPlus size={13} /> {inactive ? 'Unavailable' : 'Empty seat'}
+                <UserPlus size={13} /> {inactive ? t('Unavailable') : t('Empty seat')}
               </div>
             );
           }
@@ -507,14 +506,14 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
           )}
           <span className="min-w-0 flex-1">
             <span className={cx('block truncate text-[12px] font-semibold', !a?.destination && 'text-muted')}>
-              {a?.destination ? destinationLabel(a.destination, projects) : 'Set destination…'}
+              {a?.destination ? destLabel(a.destination, projects) : t('Set destination…')}
             </span>
             {a?.destination && (
-              <span className="block truncate text-[10.5px] text-muted">{project ? project.address : a.destination.kind === 'custom' ? a.destination.address ?? (a.destination.location ? 'Pinned on map' : 'Label only') : ''}</span>
+              <span className="block truncate text-[10.5px] text-muted">{project ? project.address : a.destination.kind === 'custom' ? a.destination.address ?? (a.destination.location ? t('Pinned on map') : t('Label only')) : ''}</span>
             )}
           </span>
           {a?.destinationLocked && <Lock size={12} className="shrink-0 text-violet" />}
-          {destChanged && <span className="text-[10px] font-bold text-violet">NEW</span>}
+          {destChanged && <span className="text-[10px] font-bold text-violet">{t('NEW')}</span>}
         </button>
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-1">
@@ -531,19 +530,19 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
             )}
           </span>
           {!readOnly && a?.crew.length && a.destination && a.stage === 'planned' ? (
-            <IconButton size="sm" label="Dispatch now" onClick={() => useStore.getState().dispatchNow(vehicle.id)}>
+            <IconButton size="sm" label={t('Dispatch now')} onClick={() => useStore.getState().dispatchNow(vehicle.id)}>
               <Play size={13} />
             </IconButton>
           ) : null}
         </div>
         {crew.length > 0 && !hasDriver && (
           <div className="flex items-center gap-1 text-[11px] font-medium text-warning">
-            <AlertTriangle size={11} /> Nobody holds licence {vehicle.requiredLicense}
+            <AlertTriangle size={11} />{' '}{t('Nobody holds licence')}{' '}{vehicle.requiredLicense}
           </div>
         )}
         {crew.length > 0 && !a?.destination && (
           <div className="flex items-center gap-1 text-[11px] font-medium text-warning">
-            <AlertTriangle size={11} /> No destination
+            <AlertTriangle size={11} />{' '}{t('No destination')}
           </div>
         )}
       </div>
@@ -554,7 +553,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
           value={a?.destination ?? null}
           locked={!!a?.destinationLocked}
           onSelect={(dest: Destination | null, lock) =>
-            commit((list) => setDestination(list, vehicle.id, dest, { lock }), `${vehicle.callsign} → ${dest ? destinationLabel(dest, projects) : 'no destination'}`)
+            commit((list) => setDestination(list, vehicle.id, dest, { lock }), `${vehicle.callsign} → ${dest ? destLabel(dest, projects) : 'no destination'}`)
           }
           onClose={() => setPicker(false)}
         />
@@ -578,7 +577,7 @@ function SeatRow({ person, vehicle, locked, isNew, readOnly, driver }: { person:
       <span
         {...listeners}
         {...attributes}
-        title={readOnly ? undefined : `Drag ${person.firstName} to another vehicle`}
+        title={readOnly ? undefined : t('Drag {name} to another vehicle', { name: person.firstName })}
         className={cx('flex min-w-0 flex-1 items-center gap-2', !readOnly && 'cursor-grab active:cursor-grabbing')}
       >
         {!readOnly && <GripVertical size={13} className="-ml-1 -mr-1 shrink-0 text-subtle opacity-0 group-hover:opacity-100" />}
@@ -586,21 +585,21 @@ function SeatRow({ person, vehicle, locked, isNew, readOnly, driver }: { person:
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[12px] font-semibold leading-tight">
             {fullName(person)}
-            {driver && <span className="ml-1 text-[10px] font-semibold text-primary">driver</span>}
-            {isNew && <span className="ml-1 text-[10px] font-bold text-violet">NEW</span>}
+            {driver && <span className="ml-1 text-[10px] font-semibold text-primary">{t('driver')}</span>}
+            {isNew && <span className="ml-1 text-[10px] font-bold text-violet">{t('NEW')}</span>}
           </span>
           <span className="block truncate text-[10.5px] leading-tight text-muted">
-            {person.role}
+            {t(person.role)}
             {person.licenses.length ? ` · ${person.licenses.join('/')}` : ''}
           </span>
         </span>
       </span>
       {!readOnly && (
         <span className={cx('flex items-center', locked ? '' : 'opacity-0 group-hover:opacity-100')}>
-          <IconButton size="sm" label={locked ? 'Unpin' : 'Pin to this vehicle'} active={locked} onClick={() => commit((list) => toggleCrewLock(list, vehicle.id, person.id))}>
+          <IconButton size="sm" label={locked ? t('Unpin') : t('Pin to this vehicle')} active={locked} onClick={() => commit((list) => toggleCrewLock(list, vehicle.id, person.id))}>
             {locked ? <Lock size={12} /> : <Unlock size={12} />}
           </IconButton>
-          <IconButton size="sm" label="Remove" onClick={() => commit((list) => unassignPerson(list, person.id), `${fullName(person)} removed from ${vehicle.callsign}`)}>
+          <IconButton size="sm" label={t('Remove')} onClick={() => commit((list) => unassignPerson(list, person.id), `${fullName(person)} removed from ${vehicle.callsign}`)}>
             <X size={12} />
           </IconButton>
         </span>
@@ -633,10 +632,10 @@ function GroupDialog({ personIds, onClose }: { personIds: ID[]; onClose: () => v
       const r = pinGroupToTask(list, ctx, { personIds, destination: dest, vehicleId: vehicleId === 'auto' ? undefined : vehicleId });
       if (r.ok) chosen = r.vehicleId;
       return r;
-    }, `${group.map((p) => p.firstName).join(', ')} pinned to ${destinationLabel(dest, projects)}`);
+    }, `${group.map((p) => p.firstName).join(', ')} pinned to ${destLabel(dest, projects)}`);
     if (ok) {
       const v = vehicles.find((x) => x.id === chosen);
-      useStore.getState().toast({ kind: 'success', title: `${group.length} people pinned to ${v?.callsign ?? 'a vehicle'}`, detail: `→ ${destinationLabel(dest, projects)}. Randomize will keep them there.` });
+      useStore.getState().toast({ kind: 'success', title: t('{n} people pinned to {v}', { n: group.length, v: v?.callsign ?? '' }), detail: t('→ {dest}. Randomize will keep them there.', { dest: destLabel(dest, projects) }) });
       useStore.getState().setPersonSelection([]);
       onClose();
     }
@@ -646,12 +645,12 @@ function GroupDialog({ personIds, onClose }: { personIds: ID[]; onClose: () => v
     <div className="pointer-events-auto fixed inset-0 z-[60] grid place-items-center bg-black/20 p-4 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <Panel className="fade-in w-[460px] p-4 shadow-float">
         <div className="flex items-center justify-between">
-          <div className="text-[15px] font-bold">Send to a task</div>
-          <IconButton size="sm" label="Close" onClick={onClose}>
+          <div className="text-[15px] font-bold">{t('Send to a task')}</div>
+          <IconButton size="sm" label={t('Close')} onClick={onClose}>
             <X size={15} />
           </IconButton>
         </div>
-        <p className="mt-0.5 text-[12px] text-muted">These people ride together, and both crew and destination get pinned so Randomize leaves them alone.</p>
+        <p className="mt-0.5 text-[12px] text-muted">{t('These people ride together, and both crew and destination get pinned so Randomize leaves them alone.')}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {group.map((p) => (
             <span key={p.id} className="flex items-center gap-1.5 rounded-full bg-panel-3 py-0.5 pl-0.5 pr-2 text-[12px] font-semibold">
@@ -660,21 +659,21 @@ function GroupDialog({ personIds, onClose }: { personIds: ID[]; onClose: () => v
             </span>
           ))}
         </div>
-        <Field label="Destination">
+        <Field label={t('Destination')}>
           <button ref={destBtn} data-testid="group-dest" onClick={() => setPicker(true)} className="flex h-9 w-full items-center gap-2 rounded-lg border border-line-strong bg-panel-solid px-2.5 text-left hover:border-primary">
             <MapPin size={14} className="text-primary" />
-            <span className={cx('flex-1 truncate font-semibold', !dest && 'text-muted')}>{dest ? destinationLabel(dest, projects) : 'Choose a project or custom destination…'}</span>
+            <span className={cx('flex-1 truncate font-semibold', !dest && 'text-muted')}>{dest ? destLabel(dest, projects) : t('Choose a project or custom destination…')}</span>
           </button>
         </Field>
-        <Field label="Vehicle">
+        <Field label={t('Vehicle')}>
           <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="h-9 w-full rounded-lg border border-line-strong bg-panel-solid px-2 text-[12.5px]">
-            <option value="auto">Pick the best free vehicle automatically</option>
+            <option value="auto">{t('Pick the best free vehicle automatically')}</option>
             {vehicleOptions.map((v) => {
               const a = plan.assignments.find((x) => x.vehicleId === v.id);
               const driverOk = group.some((p) => canDrive(p, v));
               return (
                 <option key={v.id} value={v.id}>
-                  {v.callsign} · {v.model} · {a?.crew.length ?? 0}/{crewCapacity(v)} seats used{driverOk ? '' : ` · nobody has ${v.requiredLicense}`}
+                  {v.callsign} · {v.model} · {a?.crew.length ?? 0}/{crewCapacity(v)}{' '}{t('seats used')}{driverOk ? '' : ` · ${t('nobody has {licence}', { licence: v.requiredLicense })}`}
                 </option>
               );
             })}
@@ -682,15 +681,15 @@ function GroupDialog({ personIds, onClose }: { personIds: ID[]; onClose: () => v
         </Field>
         {!group.some((p) => p.licenses.length) && (
           <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-warning-weak px-2.5 py-1.5 text-[11.5px] text-warning">
-            <AlertTriangle size={12} /> Nobody in this group has a driving licence.
+            <AlertTriangle size={12} />{' '}{t('Nobody in this group has a driving licence.')}
           </div>
         )}
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </Button>
           <Button variant="primary" icon={<Lock size={13} />} disabled={!dest} onClick={apply}>
-            Assign & pin
+            {t('Assign & pin')}
           </Button>
         </div>
       </Panel>

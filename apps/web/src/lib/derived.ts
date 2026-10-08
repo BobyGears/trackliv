@@ -1,20 +1,23 @@
 import {
   AVG_SPEED_KMH,
-  STAGE_LABEL,
-  destinationLabel,
   destinationLocation,
   etaMinutes,
   haversineM,
   isAtDepot,
   validatePlan,
   type Assignment,
+  type Destination,
   type ID,
   type Person,
+  type Project,
   type Stage,
   type Vehicle,
+  STAGE_LABEL,
+  destinationLabel,
 } from '@trackliv/core';
 import { useEffect, useMemo, useState } from 'react';
 import { opsTime } from './format';
+import { t, tx } from './i18n';
 import { useStore } from './store';
 
 /** Operations clock (server time, possibly accelerated in simulator mode), ticking every second. */
@@ -77,8 +80,8 @@ export function runInfo(vehicleId: ID, now: number): RunInfo | null {
     vehicle,
     assignment: a,
     stage,
-    stageLabel: STAGE_LABEL[stage],
-    destLabel: destinationLabel(a?.destination ?? null, s.projects),
+    stageLabel: stageLabel(stage),
+    destLabel: destLabel(a?.destination ?? null, s.projects),
     remainingM,
     etaMin: remainingM !== null ? etaMinutes(remainingM, speed) : route && stage === 'planned' ? route.durationMin : null,
     progress,
@@ -136,12 +139,27 @@ export function useKpis() {
   }, [plan, people, vehicles, projects, telemetry, sites, date, now]);
 }
 
+/** Vehicle type names in the current language (getters, so lookups always translate). */
 export const vehicleKindLabel: Record<Vehicle['kind'], string> = {
-  van: 'Van',
-  truck: 'Box truck',
-  pickup: 'Pickup',
-  car: 'Car',
+  get van() {
+    return t('Van');
+  },
+  get truck() {
+    return t('Box truck');
+  },
+  get pickup() {
+    return t('Pickup');
+  },
+  get car() {
+    return t('Car');
+  },
 };
+
+/** Stage name in the current language ("At depot", "En route" …). */
+export const stageLabel = (s: Stage) => t(STAGE_LABEL[s]);
+
+/** Destination name in the current language (project names stay as entered). */
+export const destLabel = (d: Destination | null | undefined, projects: readonly Project[]) => tx(destinationLabel(d ?? null, projects));
 
 /** "Mercedes-Benz Sprinter" – or the vehicle type while make/model are not entered yet. */
 export const vehicleDesc = (v: Pick<Vehicle, 'make' | 'model' | 'kind'>) => `${v.make} ${v.model}`.trim() || vehicleKindLabel[v.kind];

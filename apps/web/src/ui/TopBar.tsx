@@ -6,6 +6,7 @@ import { fmtAgo, fmtDate, fmtTimeSec } from '../lib/format';
 import { useStore, type View } from '../lib/store';
 import { cx, IconButton, Kbd, Panel, Segmented } from './kit';
 import { DteLogo } from './DteLogo';
+import { t, tx } from '../lib/i18n';
 
 function Logo() {
   return (
@@ -19,7 +20,7 @@ function Logo() {
       </div>
       <div className="whitespace-nowrap leading-tight">
         <div className="text-[15px] font-bold tracking-tight">TrackLiv</div>
-        <div className="text-[10px] font-medium text-muted">Dispatch</div>
+        <div className="text-[10px] font-medium text-muted">{t('Dispatch')}</div>
       </div>
       <div className="ml-1 hidden h-7 w-px bg-line xl:block" />
       <DteLogo tagline={false} className="ml-1 hidden h-[22px] w-auto xl:block" />
@@ -62,9 +63,9 @@ function SiteSwitcher() {
           <Warehouse size={13} />
         </span>
         <span className="leading-tight">
-          <span className="block max-w-40 truncate text-[12px] font-semibold">{current ? current.name : 'All projects · Germany'}</span>
+          <span className="block max-w-40 truncate text-[12px] font-semibold">{current ? current.name : t('All projects · Germany')}</span>
           <span className="block text-[10.5px] text-muted">
-            {current ? `${inYard(current.id)} in yard · ${current.code}` : `${inYard()}/${vehicles.length} vehicles in yard`}
+            {current ? t('{n} in yard · {code}', { n: inYard(current.id), code: current.code }) : t('{n}/{total} vehicles in yard', { n: inYard(), total: vehicles.length })}
           </span>
         </span>
         <ChevronDown size={14} className="text-muted" />
@@ -76,8 +77,8 @@ function SiteSwitcher() {
               <MapIcon size={14} />
             </span>
             <span>
-              <span className="block font-semibold">Overview · all projects</span>
-              <span className="block text-[11px] text-muted">Fits every project on the map</span>
+              <span className="block font-semibold">{t('Overview · all projects')}</span>
+              <span className="block text-[11px] text-muted">{t('Fits every project on the map')}</span>
             </span>
           </button>
           {sites.map((s) => (
@@ -112,11 +113,11 @@ function LiveClock() {
     <div className="relative">
       <button
         onClick={() => mode === 'simulator' && setOpen(!open)}
-        title={mode === 'fleetgo' ? `FleetGO · last sync ${fmtAgo(fleet.lastSync, now)}${fleet.error ? ` · ${fleet.error}` : ''}` : 'Simulated fleet (no FleetGO credentials configured)'}
+        title={mode === 'fleetgo' ? `${t('FleetGO · last sync {ago}', { ago: fmtAgo(fleet.lastSync, now) })}${fleet.error ? ` · ${tx(fleet.error)}` : ''}` : t('Simulated fleet (no FleetGO credentials configured)')}
         className="flex h-9 items-center gap-2 whitespace-nowrap rounded-xl border border-line bg-panel-solid px-2.5"
       >
         <span className={cx('size-2 rounded-full', ok ? 'live-dot bg-success' : 'bg-danger')} />
-        <span className={cx('text-[12px] font-semibold', ok ? 'text-success' : 'text-danger')}>{ok ? 'Live' : 'Offline'}</span>
+        <span className={cx('text-[12px] font-semibold', ok ? 'text-success' : 'text-danger')}>{ok ? t('Live') : t('Offline')}</span>
         <span className="mono text-[12px] font-semibold text-ink">{fmtTimeSec(now)}</span>
         <span className="hidden text-[11px] text-muted 2xl:inline">{date && fmtDate(date)}</span>
         <span className={cx('rounded-md px-1.5 py-0.5 text-[10px] font-bold', mode === 'fleetgo' ? 'bg-success-weak text-success' : 'bg-violet-weak text-violet')}>
@@ -126,9 +127,9 @@ function LiveClock() {
       {open && (
         <Panel className="fade-in absolute right-0 top-11 z-50 w-64 p-3 shadow-float">
           <div className="mb-1 flex items-center gap-1.5 font-semibold">
-            <Gauge size={14} /> Simulation speed
+            <Gauge size={14} />{' '}{t('Simulation speed')}
           </div>
-          <p className="mb-2 text-[11.5px] text-muted">No FleetGO credentials configured – vehicles are simulated on the real road network. Speed up to watch the day play out.</p>
+          <p className="mb-2 text-[11.5px] text-muted">{t('No FleetGO credentials configured – vehicles are simulated on the real road network. Speed up to watch the day play out.')}</p>
           <div className="grid grid-cols-5 gap-1">
             {[1, 10, 30, 60, 300].map((s) => (
               <button
@@ -156,9 +157,9 @@ function UserMenu() {
   const ref = useRef<HTMLDivElement>(null);
   const [local, setLocal] = useState(() => {
     try {
-      return localStorage.getItem('trackliv:user') || 'Dispatcher';
+      return localStorage.getItem('trackliv:user') || t('Dispatcher');
     } catch {
-      return 'Dispatcher';
+      return t('Dispatcher');
     }
   });
   useEffect(() => {
@@ -177,10 +178,10 @@ function UserMenu() {
     <div ref={ref} className="relative">
       <button
         className="flex items-center gap-2 rounded-xl py-1 pl-1 pr-2 hover:bg-panel-3"
-        title={authEnabled ? `Signed in as ${user}` : 'Click to set your name (shown in the audit log)'}
+        title={authEnabled ? t('Signed in as {user}', { user }) : t('Click to set your name (shown in the audit log)')}
         onClick={() => {
           if (authEnabled) return setOpen(!open);
-          const name = prompt('Your name for the audit log', local);
+          const name = prompt(t('Your name for the audit log'), local);
           if (name) {
             try {
               localStorage.setItem('trackliv:user', name);
@@ -194,19 +195,19 @@ function UserMenu() {
         <span className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-slate-500 to-slate-700 text-[12px] font-bold text-white">{initials || '?'}</span>
         <span className="hidden whitespace-nowrap text-left leading-tight 2xl:block">
           <span className="block text-[12px] font-semibold">{user}</span>
-          <span className="block text-[10.5px] text-muted">Operations</span>
+          <span className="block text-[10.5px] text-muted">{t('Operations')}</span>
         </span>
       </button>
       {open && (
         <Panel className="fade-in absolute right-0 top-11 z-50 w-56 p-1.5 shadow-float">
           <div className="px-2.5 py-1.5 text-[11.5px] text-muted">
-            Signed in as <span className="font-semibold text-ink">{user}</span>
+            {t('Signed in as')}{' '}<span className="font-semibold text-ink">{user}</span>
           </div>
           <button
             onClick={() => useStore.getState().logout()}
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left font-semibold text-danger hover:bg-danger-weak"
           >
-            <LogOut size={14} /> Sign out
+            <LogOut size={14} />{' '}{t('Sign out')}
           </button>
         </Panel>
       )}
@@ -222,10 +223,10 @@ function PlanDateChip() {
     <button
       onClick={() => useStore.getState().setDate(today)}
       className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-violet-weak px-3 text-[12px] font-semibold text-violet"
-      title="You are editing another day's plan – click to go back to today"
+      title={t("You are editing another day's plan – click to go back to today")}
     >
       <CalendarRange size={14} /> {fmtDate(date)}
-      <span className="font-medium opacity-80">· back to today</span>
+      <span className="font-medium opacity-80">{t('· back to today')}</span>
     </button>
   );
 }
@@ -245,10 +246,10 @@ export function TopBar() {
         value={view}
         onChange={setView}
         options={[
-          { value: 'map', label: <><MapIcon size={14} /> Map</>, title: 'Map (1)' },
-          { value: 'dispatch', label: <><Users size={14} /> Dispatch</>, title: 'Dispatch board (2)' },
-          { value: 'schedule', label: <><CalendarRange size={14} /> Schedule</>, title: 'Schedule (3)' },
-          { value: 'data', label: <><Database size={14} /> <span className="hidden xl:inline">Data</span></>, title: 'Projects, crew & vehicles (4)' },
+          { value: 'map', label: <><MapIcon size={14} />{' '}{t('Map')}</>, title: t('Map (1)') },
+          { value: 'dispatch', label: <><Users size={14} />{' '}{t('Dispatch')}</>, title: t('Dispatch board (2)') },
+          { value: 'schedule', label: <><CalendarRange size={14} />{' '}{t('Schedule')}</>, title: t('Schedule (3)') },
+          { value: 'data', label: <><Database size={14} /> <span className="hidden xl:inline">{t('Data')}</span></>, title: t('Projects, crew & vehicles (4)') },
         ]}
       />
       <button
@@ -256,18 +257,19 @@ export function TopBar() {
         className="flex h-9 min-w-[150px] max-w-[460px] flex-1 items-center gap-2 rounded-xl border border-line bg-panel-2 px-3 text-left text-muted hover:border-line-strong"
       >
         <Search size={15} className="shrink-0" />
-        <span className="flex-1 truncate">Search vehicles, crew, projects…</span>
+        <span className="flex-1 truncate">{t('Search vehicles, crew, projects…')}</span>
         <Kbd>⌘K</Kbd>
       </button>
       <div className="flex-1" />
       <PlanDateChip />
       <SiteSwitcher />
       <LiveClock />
-      <IconButton label={theme === 'light' ? 'Dark mode' : 'Light mode'} onClick={toggleTheme}>
+      <LangToggle />
+      <IconButton label={theme === 'light' ? t('Dark mode') : t('Light mode')} onClick={toggleTheme}>
         {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
       </IconButton>
       <div className="relative">
-        <IconButton label="Event log" active={eventsOpen} onClick={() => useStore.getState().setEventsOpen(!eventsOpen)}>
+        <IconButton label={t('Event log')} active={eventsOpen} onClick={() => useStore.getState().setEventsOpen(!eventsOpen)}>
           <Bell size={16} />
         </IconButton>
         {unread > 0 && (
@@ -278,5 +280,24 @@ export function TopBar() {
       </div>
       <UserMenu />
     </Panel>
+  );
+}
+
+/** DE / EN switch – one click changes the whole interface. */
+export function LangToggle() {
+  const lang = useStore((s) => s.lang);
+  const setLang = useStore((s) => s.setLang);
+  return (
+    <button
+      onClick={() => setLang(lang === 'de' ? 'en' : 'de')}
+      title={lang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}
+      className="flex h-9 shrink-0 items-center rounded-xl border border-line bg-panel-solid p-0.5 text-[11px] font-bold"
+    >
+      {(['de', 'en'] as const).map((l) => (
+        <span key={l} className={cx('rounded-lg px-1.5 py-1', lang === l ? 'bg-primary text-white' : 'text-muted')}>
+          {l.toUpperCase()}
+        </span>
+      ))}
+    </button>
   );
 }

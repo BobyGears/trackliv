@@ -3,6 +3,7 @@ import type { Person } from '@trackliv/core';
 import { fullName, initials } from '@trackliv/core';
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { Tone } from '../lib/format';
+import { t } from '../lib/i18n';
 
 export const cx = clsx;
 
@@ -214,7 +215,7 @@ export function Empty({ icon, title, hint }: { icon?: ReactNode; title: string; 
 }
 
 export function LicenseChips({ licenses }: { licenses: string[] }) {
-  if (!licenses.length) return <span className="text-[11px] text-subtle">no licence</span>;
+  if (!licenses.length) return <span className="text-[11px] text-subtle">{t('no licence')}</span>;
   return (
     <span className="inline-flex gap-0.5">
       {licenses.map((l) => (
