@@ -44,6 +44,7 @@ import { runInfo, useOpsNow, vehicleKindLabel, vehicleDesc, stageLabel } from '.
 import { PRIORITY_TONE, STAGE_TONE, fmtAgo, fmtDuration, fmtTime } from '../lib/format';
 import { useStore, type Selection } from '../lib/store';
 import { DestinationPicker } from './DestinationPicker';
+import { InventorySection } from './InventorySection';
 import { VehicleHistory } from './VehicleHistory';
 import { Avatar, AvatarStack, Button, IconButton, LicenseChips, Panel, Pill, ProgressBar, Prop, SectionLabel, cx } from './kit';
 import { t, tx } from '../lib/i18n';
@@ -303,6 +304,8 @@ function VehiclePanel({ id }: { id: ID }) {
             )}
           </div>
         </div>
+
+        <InventorySection kind="vehicle" refId={id} dropAt={project ? { id: project.id, name: project.name } : undefined} />
 
         <div>
           <SectionLabel>{t('Assignment')}</SectionLabel>
@@ -689,6 +692,7 @@ function ProjectPanel({ id }: { id: ID }) {
             </select>
           )}
         </div>
+        <InventorySection kind="project" refId={id} />
         <div>
           <SectionLabel>{t('Details')}</SectionLabel>
           <div className="mt-1.5">

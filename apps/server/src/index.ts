@@ -20,7 +20,8 @@ import {
   type Project,
   type Vehicle,
 } from '@trackliv/core';
-import { AtlasSessions, atlasLogin, atlasProbe } from './atlasAuth.ts';
+import { atlasApiConfig, atlasUser, redeemTicket, type AtlasUser } from './atlasApi.ts';
+import { AtlasSessions, accessVerdict, atlasLogin, atlasProbe, type AtlasConfig } from './atlasAuth.ts';
 import {
   cookieValue,
   createAuth,
@@ -40,6 +41,7 @@ import { ops } from './ops.ts';
 import { demoPeople, demoProjects, demoVehicles } from './seed.ts';
 import { resetSimVehicle, startSimulator } from './simulator.ts';
 import { flushHistory, historyDays, vehicleHistory } from './history.ts';
+import { Inventory, type Actor } from './inventory.ts';
 
 // ---------------------------------------------------------------------------------------------
 // First start: seed master data and a randomized plan for today.
@@ -92,25 +94,52 @@ if (auth.enabled && !/^[0-9a-f]{32,}$/i.test(process.env.TRACKLIV_SESSION_SECRET
 }
 
 // Registra Atlas accounts: sessions are kept server-side and re-checked with Atlas every 5 minutes.
+const atlasApiCfg = atlasApiConfig(process.env);
+/** An Atlas account as TrackLiv's session identity – or why it may not use TrackLiv. */
+function atlasIdentity(atlas: AtlasConfig, u: AtlasUser) {
+  const email = String(u.email ?? '').toLowerCase();
+  const verdict = accessVerdict(atlas.access, u, email);
+  return verdict.ok ? { ok: true as const, identity: { uid: u.id, email, name: (u.full_name ?? '').trim() || email, admin: !!u.is_admin } } : verdict;
+}
 const atlasSessions =
   auth.mode === 'atlas' && auth.atlas
-    ? new AtlasSessions(auth.atlas, auth.secret, join(config.dataDir, 'sessions.json'), (key, s, why) => {
-        closeStreams(key);
-        if (why === 'revoked' || why === 'unverified') {
-          ops.log({
-            kind: 'system',
-            severity: 'info',
-            title: `${s.name} signed out`,
-            detail: why === 'revoked' ? 'Atlas account locked, deactivated or without TrackLiv access' : 'Atlas could not confirm the account for 7 days',
-          });
-        }
-      })
+    ? new AtlasSessions(
+        auth.atlas,
+        auth.secret,
+        join(config.dataDir, 'sessions.json'),
+        (key, s, why) => {
+          closeStreams(key);
+          if (why === 'revoked' || why === 'unverified') {
+            ops.log({
+              kind: 'system',
+              severity: 'info',
+              title: `${s.name} signed out`,
+              detail: why === 'revoked' ? 'Atlas account locked, deactivated or without TrackLiv access' : 'Atlas could not confirm the account for 7 days',
+            });
+          }
+        },
+        Date.now,
+        // sessions from Atlas' menu: ask Atlas for the account's current state
+        async (uid) => {
+          if (!atlasApiCfg || !auth.atlas) return { ok: false, revoked: true };
+          const r = await atlasUser(atlasApiCfg, uid);
+          if (!r.ok) return { ok: false, revoked: r.status === 404 || r.status === 403 };
+          const v = atlasIdentity(auth.atlas, r.data.user);
+          return v.ok ? v : { ok: false, revoked: true };
+        },
+      )
     : null;
+// Registra Atlas' Inventar: machines and equipment go with a vehicle or stay at a project. Needs the Atlas
+// accounts (Atlas checks every change against the signed-in person) and the shared key (ATLAS_TRACKLIV_KEY).
+const inventory = new Inventory(atlasSessions ? atlasApiCfg : null, (state) => broadcast('inventory', state));
+
 if (atlasSessions && auth.atlas) {
   const a = auth.atlas.access;
   const who = a.all ? 'every active Atlas account' : `Atlas admins${a.emails.size ? ` + ${a.emails.size} listed account${a.emails.size === 1 ? '' : 's'}` : ''}`;
   if (process.env.TRACKLIV_USERS) console.log('[auth] TRACKLIV_USERS is ignored – sign-in uses the Registra Atlas accounts');
-  void atlasProbe(auth.atlas).then((r) => console.log(`[auth] sign-in with Registra Atlas accounts (access: ${who}) – ${r}`));
+  void atlasProbe(auth.atlas).then((r) =>
+    console.log(`[auth] sign-in with Registra Atlas accounts (access: ${who} and the "TrackLiv" permission) – ${r}${atlasApiCfg ? ' · sign-in from Atlas\' menu on' : ''}`),
+  );
   setInterval(() => {
     void atlasSessions.recheckDue(streamSessions()).catch(() => {});
     atlasSessions.save();
@@ -193,6 +222,31 @@ app.post('/api/auth/login', async (req, res) => {
   ops.log({ kind: 'system', severity: 'info', title: `${match[0]} signed in` });
   res.json({ user: match[0] });
 });
+// From Atlas' menu ("TrackLiv"): Atlas opens /api/auth/atlas?ticket=… in a new tab; the one-time ticket is
+// redeemed with Atlas server to server and the person is signed in to their own account.
+app.get('/api/auth/atlas', async (req, res) => {
+  res.set({ 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' });
+  const back = (why: string) => res.redirect(303, `/?anmeldung=${why}`);
+  const ticket = String(req.query.ticket ?? '');
+  if (!atlasSessions || !auth.atlas || !atlasApiCfg) return back('nicht-eingerichtet');
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(ticket)) return back('abgelaufen');
+  const ip = req.ip ?? 'unknown';
+  if (loginRateLimited(ip)) return back('zu-viele');
+  const r = await redeemTicket(atlasApiCfg, ticket);
+  if (!r.ok) {
+    // 403: Atlas knows the account but it may not use TrackLiv (no permission, deactivated)
+    if (r.status === 403) return back('kein-zugang');
+    if (r.status) noteFailedLogin(ip);
+    return back(r.status === 0 ? 'atlas-nicht-erreichbar' : 'abgelaufen');
+  }
+  const v = atlasIdentity(auth.atlas, r.data.user);
+  if (!v.ok) return back(v.reason === 'inactive' ? 'deaktiviert' : 'kein-zugang');
+  await atlasSessions.logout(cookieValue(req)); // a previous TrackLiv session in this browser
+  setSessionCookie(req, res, atlasSessions.create({ provider: 'sso', ...v.identity }));
+  ops.log({ kind: 'system', severity: 'info', title: `${v.identity.name} signed in`, detail: 'from Registra Atlas' });
+  res.redirect(303, '/');
+});
+
 app.post('/api/auth/logout', async (req, res) => {
   await atlasSessions?.logout(cookieValue(req));
   setSessionCookie(req, res, null);
@@ -231,6 +285,7 @@ app.get('/api/bootstrap', (req, res) => {
     telemetry: [...ops.telemetry.values()],
     events: ops.recentEvents(400),
     fleet: ops.fleet,
+    inventory: inventory.current,
   };
   res.json(body);
 });
@@ -291,6 +346,67 @@ app.get('/api/history/:vehicleId', (req, res) => {
   if (!db.data.vehicles.some((v) => v.id === vehicleId)) return void res.status(404).json({ error: 'Unknown vehicle' });
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date ?? '')) ? String(req.query.date) : ops.today();
   res.json({ ...vehicleHistory(vehicleId, date), days: historyDays().slice(0, 60) });
+});
+
+// --- Registra Atlas Inventar ------------------------------------------------------------------
+/** The signed-in Atlas account (null with local accounts or without a login). */
+const actorFrom = (res: Response): Actor | null =>
+  res.locals.userId ? { id: String(res.locals.userId), name: String(res.locals.user ?? ''), email: res.locals.userEmail ? String(res.locals.userEmail) : undefined } : null;
+const NO_ATLAS = 'Atlas Inventar needs sign-in with Registra Atlas accounts and the shared key (see README)';
+
+app.get('/api/inventory', (_req, res) => void res.json(inventory.current));
+
+/** Everything the signed-in person may see in Atlas' Inventar, for the picker. */
+app.get('/api/inventory/available', async (_req, res) => {
+  const actor = actorFrom(res);
+  if (!inventory.current.enabled || !actor) return void res.status(503).json({ error: NO_ATLAS });
+  const r = await inventory.available(actor);
+  if (!r.ok) return void res.status(r.status).json({ error: r.error });
+  res.json({ items: r.items });
+});
+
+/** Put an article on a vehicle or leave it at a project (also: move it from one to the other). */
+app.post('/api/inventory/:id/use', async (req, res) => {
+  const actor = actorFrom(res);
+  if (!inventory.current.enabled || !actor) return void res.status(503).json({ error: NO_ATLAS });
+  const kind = req.body?.kind === 'project' ? 'project' : req.body?.kind === 'vehicle' ? 'vehicle' : null;
+  const ref = String(req.body?.ref ?? '');
+  let label = '';
+  if (kind === 'vehicle') {
+    const v = db.data.vehicles.find((x) => x.id === ref);
+    if (v) label = v.plate && v.plate !== v.callsign ? `${v.callsign} · ${v.plate}` : v.callsign;
+  } else if (kind === 'project') {
+    const p = db.data.projects.find((x) => x.id === ref);
+    if (p) label = p.code ? `${p.name} (${p.code})` : p.name;
+  }
+  if (!kind || !label) return void res.status(400).json({ error: 'Unknown vehicle or project' });
+  const r = await inventory.setUse(String(req.params.id), { kind, ref, label }, actor);
+  if (!r.ok) return void res.status(r.status).json({ error: r.error });
+  ops.log({
+    kind: 'assignment',
+    severity: 'info',
+    title: kind === 'vehicle' ? `${r.item.name} loaded onto ${label}` : `${r.item.name} left at ${label}`,
+    detail: `by ${actor.name}`,
+    refs: kind === 'vehicle' ? { vehicleId: ref } : { projectId: ref },
+  });
+  res.json({ item: r.item });
+});
+
+/** Back to stock: Atlas makes the article available again (and its old location). */
+app.post('/api/inventory/:id/release', async (req, res) => {
+  const actor = actorFrom(res);
+  if (!inventory.current.enabled || !actor) return void res.status(503).json({ error: NO_ATLAS });
+  const before = inventory.current.items.find((x) => x.id === req.params.id)?.use;
+  const r = await inventory.setUse(String(req.params.id), null, actor);
+  if (!r.ok) return void res.status(r.status).json({ error: r.error });
+  ops.log({
+    kind: 'assignment',
+    severity: 'info',
+    title: `${r.item.name} back to stock`,
+    detail: `by ${actor.name}`,
+    refs: before?.kind === 'vehicle' ? { vehicleId: before.ref } : before?.kind === 'project' ? { projectId: before.ref } : undefined,
+  });
+  res.json({ item: r.item });
 });
 
 app.post('/api/routes', (req, res) => {
@@ -471,6 +587,8 @@ app.listen(config.port, () => {
   console.log(`[trackliv] API on http://localhost:${config.port} (${live ? 'FleetGO live' : 'simulator'}), today ${todayISO()}`);
   if (live) startFleetGoSync();
   else startSimulator(config.simulator.tickMs);
+  inventory.start();
+  if (inventory.current.enabled) console.log('[inventory] Registra Atlas Inventar connected');
 });
 
 process.on('SIGINT', () => {

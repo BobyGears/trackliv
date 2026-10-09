@@ -255,10 +255,12 @@ try {
   await page.getByText('Timeline', { exact: true }).or(page.getByText('Nothing recorded on this day')).first().waitFor({ timeout: 8000 });
   const days = await Promise.all(boot.vehicles.map((v) => api(`/api/history/${v.id}`)));
   const driven = days.filter((d) => d.trips.length);
+  // early in the morning nobody has left yet: then every vehicle is recorded standing in the yard
+  const departed = (await api(`/api/plans/${boot.today}`)).assignments.some((a) => a.stageTimes?.departed);
   check(
     'vehicle history shows the day with stops and trips',
-    days.every((d) => d.points.length > 0) && driven.length > 0 && driven.every((d) => d.stops.length >= 2 && d.totals.distanceM > 0),
-    `${driven.length} vehicles drove today`,
+    days.every((d) => d.points.length > 0) && (departed ? driven.length > 0 : true) && driven.every((d) => d.stops.length >= 2 && d.totals.distanceM > 0),
+    departed ? `${driven.length} vehicles drove today` : 'nobody has left yet today, all recorded in the yard',
   );
   await page.getByRole('button', { name: 'Live', exact: true }).click();
 

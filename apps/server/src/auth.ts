@@ -136,6 +136,8 @@ export function requireSession(auth: AuthConfig, atlas: AtlasSessions | null) {
       const s = await atlas?.resolve(cookieValue(req)).catch(() => null);
       if (!s) return void res.status(401).json({ error: 'Please sign in' });
       res.locals.user = s.user;
+      res.locals.userId = s.uid;
+      res.locals.userEmail = s.email;
       res.locals.sessionKey = s.key;
       return next();
     }

@@ -161,6 +161,17 @@ else
     setenv ATLAS_SUPABASE_URL "\$SB_URL"
     setenv ATLAS_SUPABASE_ANON_KEY "\$SB_ANON"
     setenv ATLAS_ACCESS '${ACCESS}'
+    # Sign-in from Atlas' menu and Atlas' Inventar: Atlas' API with the shared key (Atlas' deploy.sh generates it)
+    TL_KEY=\$(aget TRACKLIV_SCHLUESSEL)
+    if [ \${#TL_KEY} -ge 32 ]; then
+      setenv ATLAS_API_URL http://registra-review-api:3000
+      setenv ATLAS_TRACKLIV_KEY "\$TL_KEY"
+      echo '   Atlas link: "TrackLiv" in the Atlas menu signs people in · Atlas Inventar on vehicles and projects'
+    else
+      setenv ATLAS_API_URL ''; setenv ATLAS_TRACKLIV_KEY ''
+      echo '   ! TRACKLIV_SCHLUESSEL is missing in Atlas .env: run Atlas ./deploy.sh once (it generates the key),'
+      echo '     then this deploy again. Until then: no sign-in from the Atlas menu and no Atlas Inventar.'
+    fi
     if [ "\${PRIM:-aus}" = an ] && [ -n "\$KONTO_KEY" ]; then VIA="Konto-Dienst\${SB_ANON:+, Supabase as fallback}"
     elif [ -n "\$SB_ANON" ]; then VIA='Supabase (Atlas KONTO_PRIMAER is off)'
     else VIA='Konto-Dienst – note: KONTO_PRIMAER is off in Atlas and no Supabase key was found'; fi
@@ -168,7 +179,7 @@ else
     if [ -n "\$KONTO_KEY" ] && ! docker ps --format '{{.Names}}' | grep -qx registra-konto-dienst; then
       echo '   ! registra-konto-dienst is not running – sign-in works only through the Supabase fallback'; fi
   else
-    for k in ATLAS_AUTH_URL ATLAS_ANON_KEY ATLAS_PRIMARY ATLAS_SUPABASE_URL ATLAS_SUPABASE_ANON_KEY ATLAS_ACCESS; do setenv \$k ''; done
+    for k in ATLAS_AUTH_URL ATLAS_ANON_KEY ATLAS_PRIMARY ATLAS_SUPABASE_URL ATLAS_SUPABASE_ANON_KEY ATLAS_ACCESS ATLAS_API_URL ATLAS_TRACKLIV_KEY; do setenv \$k ''; done
     echo "   ! No Registra Atlas sign-in found in ${ATLAS_HOME}/.env – using TrackLiv logins (TRACKLIV_USERS)"
     if ! grep -Eq '^TRACKLIV_USERS=.+' .env; then
       PW=\$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-16)

@@ -183,15 +183,28 @@ People sign in to TrackLiv with their **Registra Atlas account**: the same e-mai
 
 How it works:
 - **Settings:** every deploy copies just the needed values (`KONTO_ANON_KEY`, `KONTO_PRIMAER`, `SUPABASE_URL`) from `/opt/registra-atlas/.env` into TrackLiv's `.env` (`ATLAS_*`). Atlas' service keys and database passwords are never copied. The public Supabase key for the fallback comes from the Atlas project folder on your computer (`ATLAS_DIR` in `deploy/server.env`, default `~/Documents/GitHub/registra-atlas`).
-- **Who gets in:** set `ACCESS` in `deploy/server.env` and deploy:
-  - `admins` (the default): Atlas administrators only,
+- **Who gets in:** Atlas administrators, and everyone with the **TrackLiv** permission in Atlas (Verwaltung → Benutzer → the person → "TrackLiv"). `ACCESS` in `deploy/server.env` can widen that:
+  - `admins` (the default): nobody extra,
   - `all`: every active Atlas account,
-  - or admins plus e-mails: `ACCESS="admins,dispo@dd-gruppe.de,lager@dd-gruppe.de"`.
+  - or e-mails: `ACCESS="admins,dispo@dd-gruppe.de,lager@dd-gruppe.de"`.
+- **From Atlas' menu:** people with access see "TrackLiv" in Atlas' menu. It opens TrackLiv in a new tab, already signed in to their own account: Atlas issues a one-time ticket (valid 60 seconds, usable once) and TrackLiv redeems it with Atlas server to server. These sessions are re-checked with Atlas like the others.
 - **Staying in sync with Atlas:** TrackLiv checks each session with Atlas every 5 minutes. Someone who is locked or deactivated in Atlas, or removed from `ACCESS`, is signed out of TrackLiv too, and their open screen returns to the sign-in page.
 - **Passwords and lockouts:** a forgotten password is reset in Atlas. Atlas' lockout after failed attempts applies here as well.
 - **Signing out:** signing out of TrackLiv ends only the TrackLiv session; Atlas stays signed in.
 - **Sessions:** TrackLiv's own sessions last 30 days of use and survive deploys (`data/sessions.json`, refresh tokens encrypted).
 - **Audit log:** every change is attributed to the person's Atlas name.
+
+### Machines and equipment from Atlas' Inventar
+
+The vehicle panel and the project panel have a section **Equipment & material** ("Geräte & Material"). "Add from the Atlas inventory" lists the articles of the Atlas inventories (Bestände) the signed-in person may see in Atlas; sales stock is left out. Picking one:
+
+- puts it on the vehicle, or leaves it at the project;
+- marks it **"In Benutzung"** in Atlas, with the location "TrackLiv: TE 710 · MTK TE 710" and who did it (an article from a rental stock keeps its status);
+- shows a small badge on the vehicle's dispatch card.
+
+From the vehicle, "Leave at <project>" moves it to the vehicle's project; "Back to stock" makes it available in Atlas again, with its old status and location. Atlas records every step in the article's history. The office invoices the article in Atlas as before, and can take it back to stock there too.
+
+Atlas checks every change against the signed-in person, so this needs the Atlas sign-in. It also needs the shared key `TRACKLIV_SCHLUESSEL`, which Atlas' `./deploy.sh` generates; TrackLiv's deploy copies it as `ATLAS_TRACKLIV_KEY` and sets `ATLAS_API_URL=http://registra-review-api:3000`. Atlas' Caddy blocks these internal routes from outside. `node scripts/e2e-atlas.mjs` tests the sign-in from Atlas and the inventory against a stand-in for Atlas (`scripts/atlas-mock.mjs`).
 
 To run without a login (e.g. as a demo), set `LOGIN="off"` in `deploy/server.env` and deploy; `LOGIN="on"` switches it back on.
 

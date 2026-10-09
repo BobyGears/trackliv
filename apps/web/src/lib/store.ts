@@ -6,6 +6,7 @@ import {
   type Assignment,
   type DayPlan,
   type FleetStatus,
+  type InventoryState,
   type ID,
   type OpResult,
   type OpsEvent,
@@ -87,6 +88,8 @@ interface State {
   events: OpsEvent[];
   unread: number;
   fleet: FleetStatus;
+  /** Registra Atlas' Inventar: articles on vehicles / at projects */
+  inventory: InventoryState;
   routes: Record<string, Route>;
 
   view: View;
@@ -209,6 +212,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
   events: [],
   unread: 0,
   fleet: { source: 'simulator', connected: false, pollSeconds: 1 },
+  inventory: { enabled: false, items: [] },
   routes: {},
 
   view: 'map',
@@ -293,6 +297,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
         telemetry: Object.fromEntries(b.telemetry.map((t) => [t.vehicleId, t])),
         events: b.events,
         fleet: b.fleet,
+        inventory: b.inventory ?? { enabled: false, items: [] },
       });
       void get().refreshRoutes();
       closeStream?.();
@@ -322,6 +327,7 @@ export const useStore = create<State & Actions>()((set, get) => ({
           if (m.projects) void get().refreshRoutes();
         },
         vehicles: (vehicles) => set({ vehicles }),
+        inventory: (inventory) => set({ inventory }),
         status: (connected) => {
           set({ connected });
           // a stream that keeps failing may mean the session is gone (e.g. expired while the server restarted)

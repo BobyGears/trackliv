@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { AtlasSessions, RECHECK_MS, atlasConfig, atlasLogin, parseAccess, type AtlasConfig } from './atlasAuth.ts';
+import { AtlasSessions, RECHECK_MS, accessVerdict, atlasConfig, atlasLogin, parseAccess, type AtlasConfig } from './atlasAuth.ts';
 
 /** A stand-in for Atlas' Konto-Dienst / Supabase: GoTrue token + logout, PostgREST profiles. */
 function fakeAtlas(key: string) {
@@ -153,6 +153,34 @@ describe('Registra Atlas sign-in', () => {
     expect((await atlasLogin(listed, 'dispo@dd-gruppe.de', 'dispo-pass-1')).ok).toBe(true);
     konto.users.get('dispo@dd-gruppe.de')!.profile.is_active = false;
     expect(await atlasLogin(listed, 'dispo@dd-gruppe.de', 'dispo-pass-1')).toMatchObject({ ok: false, status: 403, error: 'This Atlas account is deactivated' });
+  });
+
+  it('the "TrackLiv" permission in Atlas lets non-admins in', () => {
+    const access = parseAccess('admins');
+    expect(accessVerdict(access, { id: 'u', is_active: true, can_trackliv: true }, 'dispo@dd-gruppe.de').ok).toBe(true);
+    expect(accessVerdict(access, { id: 'u', is_active: true, can_trackliv: false }, 'dispo@dd-gruppe.de').ok).toBe(false);
+    expect(accessVerdict(access, { id: 'u', is_active: false, can_trackliv: true }, 'dispo@dd-gruppe.de').ok).toBe(false);
+  });
+
+  it('sessions from Atlas\' menu are re-checked by asking Atlas for the account', async () => {
+    let now = Date.now();
+    let state: 'ok' | 'down' | 'gone' = 'ok';
+    const ended: string[] = [];
+    const store = new AtlasSessions(cfg, Buffer.alloc(32, 9), null, (_k, s, why) => ended.push(`${s.email}:${why}`), () => now, async (uid) =>
+      state === 'ok' ? { ok: true, identity: { uid, email: 'dispo@dd-gruppe.de', name: 'Dana Dispo (neu)', admin: false } } : { ok: false, revoked: state === 'gone' },
+    );
+    const cookie = store.create({ provider: 'sso', uid: 'u-dispo', email: 'dispo@dd-gruppe.de', name: 'Dana Dispo', admin: false });
+    expect(await store.resolve(cookie)).toMatchObject({ user: 'Dana Dispo' });
+    now += RECHECK_MS + 1000;
+    expect(await store.resolve(cookie)).toMatchObject({ user: 'Dana Dispo (neu)' }); // name follows Atlas
+    now += RECHECK_MS + 1000;
+    state = 'down';
+    expect(await store.resolve(cookie)).not.toBeNull(); // Atlas unreachable: stays signed in
+    now += RECHECK_MS + 1000;
+    state = 'gone';
+    expect(await store.resolve(cookie)).toBeNull();
+    expect(ended).toEqual(['dispo@dd-gruppe.de:revoked']);
+    await store.logout(cookie); // nothing to end in Atlas, no error
   });
 
   it('re-checks sessions with Atlas: rotation, outage, deactivation, logout, restart', async () => {

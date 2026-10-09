@@ -1,5 +1,26 @@
 import { Loader2, LogIn, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
+
+/** Why a sign-in from Atlas' menu did not work (/?anmeldung=… from /api/auth/atlas). */
+const FROM_ATLAS: Record<string, string> = {
+  abgelaufen: 'The sign-in link from Atlas has expired – click "TrackLiv" in Atlas again.',
+  'kein-zugang': 'Your Atlas account has no access to TrackLiv – please ask an administrator',
+  deaktiviert: 'This Atlas account is deactivated',
+  'atlas-nicht-erreichbar': 'The Atlas sign-in is not reachable right now – please try again in a moment',
+  'nicht-eingerichtet': 'Signing in from Atlas is not set up on this server yet – please sign in with e-mail and password.',
+  'zu-viele': 'Too many attempts – try again in 15 minutes',
+};
+
+function atlasNotice(): string | null {
+  try {
+    const why = new URLSearchParams(location.search).get('anmeldung');
+    if (!why) return null;
+    history.replaceState(null, '', location.pathname); // not again on reload
+    return FROM_ATLAS[why] ?? FROM_ATLAS.abgelaufen;
+  } catch {
+    return null;
+  }
+}
 import { useStore } from '../lib/store';
 import { Panel } from './kit';
 import { DteLogo } from './DteLogo';
@@ -18,7 +39,7 @@ export function LoginScreen() {
     }
   });
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(atlasNotice);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {

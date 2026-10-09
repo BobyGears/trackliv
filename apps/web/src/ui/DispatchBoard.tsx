@@ -40,6 +40,7 @@ import {
   GripVertical,
   Lock,
   MapPin,
+  Package,
   Play,
   Redo2,
   Search,
@@ -56,6 +57,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { STAGE_TONE } from '../lib/format';
 import { useStore } from '../lib/store';
 import { DestinationPicker } from './DestinationPicker';
+import { useInventoryAt } from './InventorySection';
 import { TimeInput } from './ObjectPanel';
 import { DateNav } from './DateNav';
 import { RandomizePanel } from './RandomizePanel';
@@ -415,6 +417,7 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
   const draggedHere = !!dragged && !!a?.crew.includes(dragged.id);
   const full = !!dragged && !draggedHere && crew.length >= cap;
   const canDrop = !!dragged && !readOnly && !inactive && !draggedHere;
+  const gear = useInventoryAt('vehicle', vehicle.id);
 
   return (
     <div
@@ -448,6 +451,14 @@ function VehicleCard({ vehicle, assignment, before, readOnly }: { vehicle: Vehic
             {vehicleDesc(vehicle)} · {vehicle.requiredLicense}
           </span>
         </button>
+        {gear.length > 0 && (
+          <span title={`${t('Equipment & material')}: ${gear.map((g) => g.name).join(', ')}`} data-inventory-badge>
+            <Pill tone="cyan">
+              <Package size={10} />
+              {gear.length}
+            </Pill>
+          </span>
+        )}
         {inactive ? (
           <Pill tone="warning">{t(vehicle.status)}</Pill>
         ) : (

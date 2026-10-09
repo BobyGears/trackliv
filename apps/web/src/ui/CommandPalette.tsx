@@ -43,8 +43,9 @@ export function CommandPalette() {
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // reset when it closes, so text typed right after opening is never wiped
   useEffect(() => {
-    if (open) {
+    if (!open) {
       setQ('');
       setActive(0);
     }

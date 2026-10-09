@@ -14,12 +14,19 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
  *   ATLAS_AUTH_URL=http://registra-konto-dienst:8100   ATLAS_ANON_KEY=<Atlas' KONTO_ANON_KEY>
  *   ATLAS_SUPABASE_URL=https://….supabase.co           ATLAS_SUPABASE_ANON_KEY=<Atlas' public anon key>
  *   ATLAS_PRIMARY=an|aus     (Atlas' KONTO_PRIMAER – with "aus" only Supabase is asked)
- *   ATLAS_ACCESS=admins | all | a@dd-gruppe.de,b@dd-gruppe.de   (Atlas admins always have access)
+ *   ATLAS_ACCESS=admins | all | a@dd-gruppe.de,b@dd-gruppe.de   (extra access; see below)
  *
  * ./deploy.sh fills the first five in from the Atlas installation on the same server.
+ *
+ * Who may use TrackLiv is decided in Atlas: administrators, and everyone whose "TrackLiv" permission is
+ * switched on under Verwaltung → Benutzer (profile flag can_trackliv). ATLAS_ACCESS can widen that.
+ *
+ * From Atlas' menu ("TrackLiv") people arrive already signed in: Atlas hands out a one-time ticket that
+ * TrackLiv redeems server to server (atlasApi.ts). Those sessions have no refresh token; TrackLiv re-checks
+ * them by asking Atlas for the account's current state.
  */
 
-export type ProviderName = 'konto' | 'supabase';
+export type ProviderName = 'konto' | 'supabase' | 'sso';
 export interface Provider {
   name: ProviderName;
   url: string;
@@ -45,6 +52,8 @@ export interface Profile {
   email?: string | null;
   is_admin?: boolean;
   is_active?: boolean;
+  /** "TrackLiv" permission in Atlas (Verwaltung → Benutzer) */
+  can_trackliv?: boolean;
 }
 
 export interface AtlasIdentity {
@@ -55,7 +64,7 @@ export interface AtlasIdentity {
   admin: boolean;
 }
 
-interface Tokens {
+export interface Tokens {
   access_token: string;
   refresh_token: string;
   expires_at?: number;
@@ -138,7 +147,7 @@ async function endAtlasSession(cfg: AtlasConfig, p: Provider, accessToken: strin
 export type Verdict = { ok: true } | { ok: false; reason: 'inactive' | 'no-access' };
 export function accessVerdict(access: Access, profile: Profile | null, email: string): Verdict {
   if (!profile || profile.is_active === false) return { ok: false, reason: 'inactive' };
-  if (profile.is_admin || access.all || access.emails.has(email.toLowerCase())) return { ok: true };
+  if (profile.is_admin || profile.can_trackliv || access.all || access.emails.has(email.toLowerCase())) return { ok: true };
   return { ok: false, reason: 'no-access' };
 }
 
@@ -148,7 +157,7 @@ const REFUSED: Record<string, string> = {
   email_not_confirmed: 'This Atlas account is not confirmed yet',
   validation_failed: 'Wrong e-mail or password',
 };
-const VERDICT_MSG = {
+export const VERDICT_MSG = {
   inactive: 'This Atlas account is deactivated',
   'no-access': 'Your Atlas account has no access to TrackLiv – please ask an administrator',
 } as const;
@@ -245,6 +254,8 @@ interface Stored extends AtlasIdentity {
 
 export interface SessionInfo {
   key: string;
+  /** the Atlas account id */
+  uid: string;
   user: string;
   email: string;
   admin: boolean;
@@ -267,6 +278,8 @@ export class AtlasSessions {
     private file: string | null,
     private onEnd: (key: string, s: Stored, why: string) => void = () => {},
     private now: () => number = Date.now,
+    /** re-check of sessions that came from an Atlas ticket (no refresh token): the account's current state */
+    private accountCheck?: (uid: string) => Promise<{ ok: true; identity: Omit<AtlasIdentity, 'provider'> } | { ok: false; revoked: boolean }>,
   ) {
     this.key = createHash('sha256').update('trackliv-atlas-refresh:').update(secret).digest();
     this.load();
@@ -308,13 +321,13 @@ export class AtlasSessions {
     this.dirty = false;
   }
 
-  /** New session after atlasLogin → the cookie value. */
-  create(identity: AtlasIdentity, tokens: Tokens): string {
+  /** New session after atlasLogin (or a redeemed Atlas ticket, without tokens) → the cookie value. */
+  create(identity: AtlasIdentity, tokens?: Tokens): string {
     const id = randomBytes(32).toString('base64url');
     const key = hashId(id);
     const t = this.now();
-    this.sessions.set(key, { ...identity, rt: this.enc(tokens.refresh_token), created: t, lastSeen: t, checked: t });
-    this.rememberAccess(key, tokens);
+    this.sessions.set(key, { ...identity, rt: this.enc(tokens?.refresh_token ?? ''), created: t, lastSeen: t, checked: t });
+    if (tokens) this.rememberAccess(key, tokens);
     this.save(true);
     return id;
   }
@@ -345,7 +358,7 @@ export class AtlasSessions {
     s.lastSeen = this.now();
     this.dirty = true;
     if (this.now() - s.checked > this.cfg.recheckMs) s = await this.recheck(key);
-    return s ? { key, user: s.name, email: s.email, admin: s.admin } : null;
+    return s ? { key, uid: s.uid, user: s.name, email: s.email, admin: s.admin } : null;
   }
 
   /** One check at a time per session (refresh tokens rotate). */
@@ -361,6 +374,16 @@ export class AtlasSessions {
     const s = this.sessions.get(key);
     if (!s) return null;
     if ((this.retryAt.get(key) ?? 0) > this.now()) return s; // Atlas was unreachable a moment ago
+    if (s.provider === 'sso') {
+      const r = this.accountCheck ? await this.accountCheck(s.uid) : { ok: false as const, revoked: true };
+      if (r.ok) {
+        Object.assign(s, r.identity, { checked: this.now() });
+        this.retryAt.delete(key);
+        this.save(true);
+        return s;
+      }
+      return this.failed(key, s, r.revoked);
+    }
     const rt = this.dec(s.rt);
     if (!rt) {
       this.end(key, 'invalid');
@@ -379,7 +402,11 @@ export class AtlasSessions {
       s.rt = this.enc(r.tokens.refresh_token);
       this.save(true);
     }
-    if (r.revoked) {
+    return this.failed(key, s, r.revoked);
+  }
+
+  private failed(key: string, s: Stored, revoked: boolean): Stored | null {
+    if (revoked) {
       this.end(key, 'revoked');
       return null;
     }
@@ -409,7 +436,7 @@ export class AtlasSessions {
     this.sessions.delete(key);
     this.access.delete(key);
     this.save(true);
-    if (rt) await atlasLogout(this.cfg, s.provider, access && access.exp > this.now() + 30_000 ? access.token : undefined, rt).catch(() => {});
+    if (rt && s.provider !== 'sso') await atlasLogout(this.cfg, s.provider, access && access.exp > this.now() + 30_000 ? access.token : undefined, rt).catch(() => {});
   }
 
   get size() {

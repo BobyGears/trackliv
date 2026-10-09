@@ -4,6 +4,8 @@ import type {
   DayHistory,
   DayPlan,
   FleetStatus,
+  InventoryItem,
+  InventoryState,
   LngLat,
   OpsEvent,
   Person,
@@ -96,6 +98,12 @@ export const api = {
   save: <T extends Person | Project | Vehicle>(kind: 'people' | 'projects' | 'vehicles', item: Partial<T>) =>
     item.id ? req<T>('PUT', `/api/${kind}/${item.id}`, item) : req<T>('POST', `/api/${kind}`, item),
   remove: (kind: 'people' | 'projects' | 'vehicles', id: string) => req<void>('DELETE', `/api/${kind}/${id}`),
+  // Registra Atlas' Inventar
+  inventory: () => req<InventoryState>('GET', '/api/inventory'),
+  inventoryAvailable: () => req<{ items: InventoryItem[] }>('GET', '/api/inventory/available'),
+  inventoryUse: (id: string, kind: 'vehicle' | 'project', ref: string) =>
+    req<{ item: InventoryItem }>('POST', `/api/inventory/${encodeURIComponent(id)}/use`, { kind, ref }),
+  inventoryRelease: (id: string) => req<{ item: InventoryItem }>('POST', `/api/inventory/${encodeURIComponent(id)}/release`),
 };
 
 export interface StreamHandlers {
@@ -106,6 +114,7 @@ export interface StreamHandlers {
   clock: (c: ClockSnapshot) => void;
   master: (m: Partial<{ people: Person[]; projects: Project[]; vehicles: Vehicle[] }>) => void;
   vehicles: (v: Vehicle[]) => void;
+  inventory: (i: InventoryState) => void;
   status: (connected: boolean) => void;
 }
 
@@ -120,6 +129,7 @@ export function openStream(h: StreamHandlers): () => void {
   on('clock');
   on('master');
   on('vehicles');
+  on('inventory');
   // the session ended (signed out elsewhere, or Atlas withdrew access) → back to the sign-in screen
   es.addEventListener('auth', () => {
     es.close();

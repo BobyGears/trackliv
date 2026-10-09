@@ -150,6 +150,42 @@ export interface FleetStatus {
   pollSeconds: number;
 }
 
+/** Where an Atlas Inventar article is in use, as TrackLiv set it: with a vehicle or at a project. */
+export interface InventoryUse {
+  kind: 'vehicle' | 'project';
+  /** TrackLiv vehicle or project id */
+  ref: ID;
+  /** label at the time (e.g. "TE 840 · MTK-TE 840", or the project name) */
+  label: string;
+  since: string;
+  by?: string;
+}
+
+/** An article from Registra Atlas' Inventar (Atlas is the source of truth). */
+export interface InventoryItem {
+  id: string;
+  /** the Atlas inventory (Bestand) it belongs to */
+  stockId: string;
+  stock: string;
+  name: string;
+  /** inventory / serial number, if Atlas has one */
+  number?: string;
+  /** Atlas' status label, e.g. "Verfügbar", "In Benutzung", "Vermietet", "Defekt" */
+  status: string;
+  /** free to be put to use (available, reserved or rented out, and not in use from TrackLiv yet) */
+  available: boolean;
+  /** set when the article was put to use from TrackLiv */
+  use?: InventoryUse | null;
+}
+
+export interface InventoryState {
+  /** false = no Atlas connection configured */
+  enabled: boolean;
+  items: InventoryItem[];
+  syncedAt?: string;
+  error?: string;
+}
+
 export interface Bootstrap {
   serverTime: string;
   sites: Site[];
@@ -160,4 +196,5 @@ export interface Bootstrap {
   telemetry: Telemetry[];
   events: OpsEvent[];
   fleet: FleetStatus;
+  inventory: InventoryState;
 }
